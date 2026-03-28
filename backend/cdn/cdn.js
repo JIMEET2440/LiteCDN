@@ -90,6 +90,14 @@ async function handleCDNRequest(req, res) {
 
     console.log(`[CDNSystem] ✅  Response from ${edgeId} | Cache: ${cacheStatus} | Served in ${elapsed}ms`);
 
+    // Update router metrics (simple latency reporting). Load can be
+    // updated by a separate poller if implemented later.
+    try {
+      router.updateLatency(edge.id, elapsed);
+    } catch (err) {
+      // non-fatal
+    }
+
     return res.status(edgeResponse.status).send(edgeResponse.data);
 
   } catch (err) {
@@ -116,7 +124,13 @@ function handleStatusRequest(_req, res) {
   res.json({
     server: 'CDNSystem',
     port: PORT,
-    routingStrategy: 'Round-Robin',
+    routingStrategy: router.getMode() === 'round-robin' ? 'Round-Robin' : 'Alpha-Beta (latency·alpha + load·beta)',
+    routingParams: {
+      alpha: router.alpha,
+      beta: router.beta,
+      epsilon: router.epsilon,
+      mode: router.getMode(),
+    },
     currentIndex: router.getCurrentIndex(),
     edges: router.getEdgeList(),
   });
@@ -153,8 +167,45 @@ app.get('/api/tests/cache', async (_req, res) => {
 
 app.get('/api/tests/routing', async (_req, res) => {
   const gatewayBase = `http://localhost:${PORT}`;
-  const result = await testAPI.runRoutingTestAPI(gatewayBase);
+  const mode = _req.query.mode;
+  const result = mode
+    ? await testAPI.runRoutingTestByModeAPI(gatewayBase, mode)
+    : await testAPI.runRoutingTestAPI(gatewayBase);
   res.json(result);
+});
+
+app.get('/api/tests/routing/compare', async (_req, res) => {
+  const gatewayBase = `http://localhost:${PORT}`;
+  const result = await testAPI.runRoutingCompareAPI(gatewayBase);
+  res.json(result);
+});
+
+app.get('/api/routing/mode', (req, res) => {
+  const mode = req.query.mode;
+
+  if (mode) {
+    const ok = router.setMode(mode);
+    if (!ok) {
+      return res.status(400).json({
+        error: 'Invalid routing mode',
+        allowed: ['round-robin', 'alpha-beta'],
+      });
+    }
+  }
+
+  return res.json({
+    mode: router.getMode(),
+    alpha: router.alpha,
+    beta: router.beta,
+    epsilon: router.epsilon,
+  });
+});
+
+app.get('/api/routing/modes', (_req, res) => {
+  res.json({
+    available: ['round-robin', 'alpha-beta'],
+    default: 'alpha-beta',
+  });
 });
 
 // ── Route Registrations ───────────────────────────────────────
