@@ -176,7 +176,27 @@ async function runCacheTestAPI(gatewayBase) {
  * Run Routing Test and return results
  */
 async function runRoutingTestAPI(gatewayBase) {
+  let previousMode = 'alpha-beta';
+  let modeApplied = false;
+
   try {
+    const previousModeRes = await axios.get(`${gatewayBase}/api/routing/mode`, {
+      timeout: 3000,
+      validateStatus: () => true,
+    });
+    previousMode = previousModeRes.status === 200 ? previousModeRes.data?.mode : 'alpha-beta';
+
+    const mode = 'round-robin';
+    const modeRes = await axios.get(`${gatewayBase}/api/routing/mode`, {
+      params: { mode },
+      timeout: 3000,
+      validateStatus: () => true,
+    });
+    if (modeRes.status !== 200) {
+      return { error: 'Could not set routing mode for routing test' };
+    }
+    modeApplied = true;
+
     const STATUS_URL = `${gatewayBase}/status`;
     const CDN_CONTENT_BASE = `${gatewayBase}/cdn/content`;
     const NUM_REQUESTS = 12;
@@ -229,7 +249,8 @@ async function runRoutingTestAPI(gatewayBase) {
       }
     }
 
-    return {
+    const result = {
+      mode,
       expected,
       observed,
       summary: {
@@ -238,13 +259,188 @@ async function runRoutingTestAPI(gatewayBase) {
         accuracy: ((correctCount / NUM_REQUESTS) * 100).toFixed(1),
       }
     };
+
+    return result;
   } catch (err) {
     return { error: err.message };
+  } finally {
+    if (modeApplied) {
+      try {
+        await axios.get(`${gatewayBase}/api/routing/mode`, {
+          params: { mode: previousMode },
+          timeout: 3000,
+          validateStatus: () => true,
+        });
+      } catch (_restoreErr) {
+        // best-effort restore only
+      }
+    }
   }
+}
+
+/**
+ * Run Routing Test for an explicit mode.
+ */
+async function runRoutingTestByModeAPI(gatewayBase, mode) {
+  let previousMode = 'alpha-beta';
+  let modeApplied = false;
+
+  try {
+    if (mode !== 'round-robin' && mode !== 'alpha-beta') {
+      return { error: 'Invalid mode. Use round-robin or alpha-beta' };
+    }
+
+    const previousModeRes = await axios.get(`${gatewayBase}/api/routing/mode`, {
+      timeout: 3000,
+      validateStatus: () => true,
+    });
+    previousMode = previousModeRes.status === 200 ? previousModeRes.data?.mode : 'alpha-beta';
+
+    const modeRes = await axios.get(`${gatewayBase}/api/routing/mode`, {
+      params: { mode },
+      timeout: 3000,
+      validateStatus: () => true,
+    });
+    if (modeRes.status !== 200) {
+      return { error: `Could not set routing mode to ${mode}` };
+    }
+    modeApplied = true;
+
+    const STATUS_URL = `${gatewayBase}/status`;
+    const CDN_CONTENT_BASE = `${gatewayBase}/cdn/content`;
+    const NUM_REQUESTS = 24;
+
+    const statusRes = await axios.get(STATUS_URL, { timeout: 3000, validateStatus: () => true });
+    if (statusRes.status !== 200) {
+      return { error: 'Cannot reach gateway /status endpoint' };
+    }
+
+    const status = statusRes.data;
+    const edges = status.edges || [];
+    if (!Array.isArray(edges) || edges.length === 0) {
+      return { error: 'No edges available' };
+    }
+
+    const observed = [];
+    for (let i = 0; i < NUM_REQUESTS; i++) {
+      try {
+        const res = await axios.get(`${CDN_CONTENT_BASE}/hello.txt`, {
+          timeout: 5000,
+          validateStatus: () => true,
+        });
+        observed.push(res.headers['x-edge-id'] || 'UNKNOWN');
+      } catch (_err) {
+        observed.push('ERR');
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    const distribution = {};
+    for (const e of edges) {
+      distribution[e.id] = 0;
+    }
+    for (const edgeId of observed) {
+      if (distribution[edgeId] !== undefined) {
+        distribution[edgeId] += 1;
+      }
+    }
+
+    if (mode === 'round-robin') {
+      const currentIndex = Number.isFinite(status.currentIndex) ? status.currentIndex : -1;
+      const expected = [];
+      const n = edges.length;
+      for (let i = 1; i <= NUM_REQUESTS; i++) {
+        const idx = (currentIndex + i) % n;
+        expected.push(edges[idx].id);
+      }
+
+      let correctCount = 0;
+      for (let i = 0; i < NUM_REQUESTS; i++) {
+        if (observed[i] === expected[i]) {
+          correctCount += 1;
+        }
+      }
+
+      const result = {
+        mode,
+        expected,
+        observed,
+        distribution,
+        summary: {
+          totalRequests: NUM_REQUESTS,
+          correctCount,
+          accuracy: ((correctCount / NUM_REQUESTS) * 100).toFixed(1),
+        },
+      };
+
+      return result;
+    }
+
+    // Alpha-beta does not have a fixed deterministic sequence.
+    const counts = Object.values(distribution);
+    const max = Math.max(...counts);
+    const min = Math.min(...counts);
+    const uniqueEdgesUsed = counts.filter((c) => c > 0).length;
+
+    const result = {
+      mode,
+      observed,
+      distribution,
+      summary: {
+        totalRequests: NUM_REQUESTS,
+        uniqueEdgesUsed,
+        min,
+        max,
+        spread: max - min,
+      },
+    };
+
+    return result;
+  } catch (err) {
+    return { error: err.message };
+  } finally {
+    if (modeApplied) {
+      try {
+        await axios.get(`${gatewayBase}/api/routing/mode`, {
+          params: { mode: previousMode },
+          timeout: 3000,
+          validateStatus: () => true,
+        });
+      } catch (_restoreErr) {
+        // best-effort restore only
+      }
+    }
+  }
+}
+
+async function runRoutingCompareAPI(gatewayBase) {
+  const roundRobin = await runRoutingTestByModeAPI(gatewayBase, 'round-robin');
+  const alphaBeta = await runRoutingTestByModeAPI(gatewayBase, 'alpha-beta');
+
+  if (roundRobin.error || alphaBeta.error) {
+    return {
+      error: roundRobin.error || alphaBeta.error,
+      roundRobin,
+      alphaBeta,
+    };
+  }
+
+  return {
+    roundRobin,
+    alphaBeta,
+    comparison: {
+      rrAccuracy: roundRobin.summary.accuracy,
+      alphaBetaUniqueEdges: alphaBeta.summary.uniqueEdgesUsed,
+      alphaBetaSpread: alphaBeta.summary.spread,
+    },
+  };
 }
 
 module.exports = {
   runLoadTestAPI,
   runCacheTestAPI,
   runRoutingTestAPI,
+  runRoutingTestByModeAPI,
+  runRoutingCompareAPI,
 };
