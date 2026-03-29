@@ -341,6 +341,151 @@
       animation: spin 1s linear infinite;
       margin: 0 auto 1rem;
     }
+
+    .routing-panel {
+      margin-top: 1.5rem;
+      padding: 1.5rem;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(var(--glass-blur));
+    }
+
+    .routing-panel h3 {
+      margin-bottom: 0.8rem;
+      color: var(--accent);
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .routing-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .routing-row select {
+      padding: 0.6rem 0.8rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--card-border);
+      background: rgba(0, 0, 0, 0.2);
+      color: var(--text);
+    }
+
+    .routing-result {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      color: var(--text);
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: var(--radius-sm);
+      padding: 0.9rem;
+      min-height: 56px;
+      white-space: pre-wrap;
+    }
+
+    .routing-test-controls {
+      margin: 2rem 0 2rem 0;
+      padding: 1.5rem;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(var(--glass-blur));
+      animation: fadeSlideUp 0.6s ease-out;
+    }
+
+    .routing-control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .routing-label {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    .routing-selector-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .routing-mode-select {
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+      color: var(--text);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-family: var(--font);
+      font-weight: 500;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(var(--glass-blur));
+      min-width: 140px;
+    }
+
+    .routing-mode-select:hover {
+      background: rgba(56, 189, 248, 0.1);
+      border-color: var(--card-hover-border);
+    }
+
+    .routing-mode-select option {
+      background: var(--bg);
+      color: var(--text);
+      padding: 0.5rem;
+    }
+
+    .routing-test-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1.5rem;
+      cursor: pointer;
+      font-family: var(--font);
+      font-weight: 500;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(var(--glass-blur));
+    }
+
+    .routing-test-btn:hover {
+      background: rgba(106, 181, 255, 0.1);
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .routing-test-btn:active {
+      transform: translateY(0);
+    }
+
+    .routing-compare-btn {
+      background: linear-gradient(135deg, rgba(52, 211, 153, 0.2), rgba(34, 197, 94, 0.2));
+      border: 1px solid var(--green);
+      color: var(--green);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1.5rem;
+      cursor: pointer;
+      font-family: var(--font);
+      font-weight: 500;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(var(--glass-blur));
+    }
+
+    .routing-compare-btn:hover {
+      background: linear-gradient(135deg, rgba(52, 211, 153, 0.3), rgba(34, 197, 94, 0.3));
+      border-color: var(--green);
+      box-shadow: 0 0 15px rgba(52, 211, 153, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .routing-compare-btn:active {
+      transform: translateY(0);
+    }
   </style>
 </head>
 <body>
@@ -367,9 +512,33 @@
       <button id="runAPITests" onclick="runTestCategory('api')">
         API Tests
       </button>
+      <button id="runCacheTests" onclick="runTestCategory('cache')">
+        Cache Tests
+      </button>
+      <button id="runAlphaBetaTests" onclick="runTestCategory('alphabeta')">
+        Alpha-Beta Tests
+      </button>
       <button id="clearResults" onclick="clearResults()">
         Clear Results
       </button>
+    </div>
+
+    <div class="routing-test-controls">
+      <div class="routing-control-group">
+        <div class="routing-label">🔀 Routing Mode Tests</div>
+        <div class="routing-selector-row">
+          <select id="routingModeSelect" class="routing-mode-select">
+            <option value="alpha-beta" selected>α-β Routing</option>
+            <option value="round-robin">Round-Robin</option>
+          </select>
+          <button id="runRoutingModeTest" class="routing-test-btn" onclick="runRoutingModeTest()">
+            Test Selected Mode
+          </button>
+          <button id="compareRoutingModes" class="routing-compare-btn" onclick="compareRoutingModes()">
+            Compare RR vs AB
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -405,6 +574,14 @@
       <div class="progress-fill" id="progressBar"></div>
     </div>
     <div id="errorLog"></div>
+  </div>
+
+  <div class="routing-panel">
+    <h3>📊 Routing Algorithm Comparison</h3>
+    <div class="routing-row">
+      <span style="color: var(--muted); font-size: 0.9rem;">Execute focused routing mode tests and compare distribution strategies below.</span>
+    </div>
+    <div id="routingCompareResult" class="routing-result">No routing comparison executed yet. Click buttons above to start testing.</div>
   </div>
 
   <script>
@@ -443,6 +620,7 @@
           'selectEdge - implements perfect round-robin',
           'getEdgeList & validateRequest',
           'getCurrentIndex - tracks rotation index',
+          'updateLoad - ingests normalized edge load and scales to ms',
         ]
       },
       api: {
@@ -451,6 +629,22 @@
           'runLoadTestAPI - handles 100 concurrent requests',
           'runCacheTestAPI - validates cache behavior',
           'runRoutingTestAPI - validates routing sequence',
+        ]
+      },
+      cache: {
+        name: 'Segmented Caching (cache)',
+        tests: [
+          'Multi-edge cache coordination - each edge maintains separate cache',
+          'Cache hit rate - improves with repeated requests to same edge',
+          'Cache consistency - same file retrieved consistently through gateway',
+        ]
+      },
+      alphabeta: {
+        name: 'Alpha-Beta Routing (routing.js)',
+        tests: [
+          'Alpha-beta routing - selects edges based on combined latency and load',
+          'Epsilon-greedy - explores alternative edges probabilistically',
+          'Mode switching - can switch between round-robin and alpha-beta',
         ]
       }
     };
@@ -545,6 +739,68 @@
         }
       } catch (e) {
         console.log('Report file not found - run tests first');
+      }
+    }
+
+    async function runRoutingModeTest() {
+      const mode = document.getElementById('routingModeSelect').value;
+      const out = document.getElementById('routingCompareResult');
+      out.textContent = `Running routing test in mode: ${mode}...`;
+
+      try {
+        const res = await fetch(`http://localhost:3000/api/tests/routing?mode=${encodeURIComponent(mode)}`);
+        const data = await res.json();
+
+        if (data.error) {
+          out.textContent = `Error: ${data.error}`;
+          return;
+        }
+
+        if (mode === 'round-robin') {
+          out.textContent = [
+            `Mode: ${mode}`,
+            `Requests: ${data.summary.totalRequests}`,
+            `Correct sequence count: ${data.summary.correctCount}`,
+            `Accuracy: ${data.summary.accuracy}%`,
+            `Distribution: ${JSON.stringify(data.distribution)}`,
+          ].join('\n');
+        } else {
+          out.textContent = [
+            `Mode: ${mode}`,
+            `Requests: ${data.summary.totalRequests}`,
+            `Unique edges used: ${data.summary.uniqueEdgesUsed}`,
+            `Spread (max-min): ${data.summary.spread}`,
+            `Distribution: ${JSON.stringify(data.distribution)}`,
+          ].join('\n');
+        }
+      } catch (err) {
+        out.textContent = `Error: ${err.message}`;
+      }
+    }
+
+    async function compareRoutingModes() {
+      const out = document.getElementById('routingCompareResult');
+      out.textContent = 'Comparing round-robin and alpha-beta...';
+
+      try {
+        const res = await fetch('http://localhost:3000/api/tests/routing/compare');
+        const data = await res.json();
+
+        if (data.error) {
+          out.textContent = `Error: ${data.error}`;
+          return;
+        }
+
+        out.textContent = [
+          'Comparison complete:',
+          `Round-Robin Accuracy: ${data.roundRobin.summary.accuracy}%`,
+          `Alpha-Beta Unique Edges Used: ${data.alphaBeta.summary.uniqueEdgesUsed}`,
+          `Alpha-Beta Spread: ${data.alphaBeta.summary.spread}`,
+          `RR Distribution: ${JSON.stringify(data.roundRobin.distribution)}`,
+          `AB Distribution: ${JSON.stringify(data.alphaBeta.distribution)}`,
+        ].join('\n');
+      } catch (err) {
+        out.textContent = `Error: ${err.message}`;
       }
     }
 

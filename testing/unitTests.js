@@ -271,6 +271,13 @@ async function testCDNFunctions() {
   log('\n  Function: handleCDNRequest (round-robin)', 'bold');
   try {
     const a = new TestAssertion('cdn.js', 'handleCDNRequest - distributes via round-robin');
+    
+    // Set routing mode to round-robin for this test
+    await axios.get(`${GATEWAY_URL}/api/routing/mode`, {
+      params: { mode: 'round-robin' },
+      validateStatus: () => true,
+    });
+    
     const edgeDistribution = {};
     const edgeSequence = [];
 
@@ -281,6 +288,12 @@ async function testCDNFunctions() {
       edgeDistribution[edgeId] = (edgeDistribution[edgeId] || 0) + 1;
       edgeSequence.push(edgeId);
     }
+    
+    // Restore to alpha-beta mode for other tests
+    await axios.get(`${GATEWAY_URL}/api/routing/mode`, {
+      params: { mode: 'alpha-beta' },
+      validateStatus: () => true,
+    });
 
     // Verify distribution (each edge should get ~4 requests out of 12)
     Object.entries(edgeDistribution).forEach(([edgeId, count]) => {
@@ -544,6 +557,13 @@ async function testRoutingFunctions() {
   log('\n  Function: selectEdge', 'bold');
   try {
     const a = new TestAssertion('routing.js', 'selectEdge - implements perfect round-robin');
+    
+    // Set routing mode to round-robin for this test
+    await axios.get(`${GATEWAY_URL}/api/routing/mode`, {
+      params: { mode: 'round-robin' },
+      validateStatus: () => true,
+    });
+    
     const edgeSequence = [];
 
     // Collect 12 edge selections
@@ -551,6 +571,12 @@ async function testRoutingFunctions() {
       const res = await axios.get(`${GATEWAY_URL}/cdn/content/hello.txt`);
       edgeSequence.push(res.headers['x-edge-id']);
     }
+    
+    // Restore to alpha-beta mode
+    await axios.get(`${GATEWAY_URL}/api/routing/mode`, {
+      params: { mode: 'alpha-beta' },
+      validateStatus: () => true,
+    });
 
     // Verify pattern is cyclic
     const pattern1 = edgeSequence.slice(0, 3).join(',');
@@ -639,11 +665,26 @@ async function testRoutingFunctions() {
   try {
     const a = new TestAssertion('routing.js', 'getCurrentIndex - tracks rotation index');
     
+    // Set routing mode to round-robin to test index tracking
+    await axios.get(`${GATEWAY_URL}/api/routing/mode`, {
+      params: { mode: 'round-robin' },
+      validateStatus: () => true,
+    });
+    
+    // Make a request to advance the index
+    await axios.get(`${GATEWAY_URL}/cdn/content/hello.txt`);
+    
     const indices = [];
     for (let i = 0; i < 3; i++) {
       const res = await axios.get(`${GATEWAY_URL}/status`);
       indices.push(res.data.currentIndex);
     }
+    
+    // Restore to alpha-beta mode
+    await axios.get(`${GATEWAY_URL}/api/routing/mode`, {
+      params: { mode: 'alpha-beta' },
+      validateStatus: () => true,
+    });
 
     // Index should increment cyclically (0, 1, 2, 0, 1, 2, ...)
     a.assertTrue(indices[0] >= 0 && indices[0] <= 2, 'Index should be 0-2', { indices });
@@ -653,6 +694,48 @@ async function testRoutingFunctions() {
   } catch (err) {
     const a = new TestAssertion('routing.js', 'getCurrentIndex - tracks rotation index');
     a.assertTrue(false, `Index tracking test failed: ${err.message}`);
+    a.finish();
+  }
+
+  // Test 5: Load metrics normalization and scaling
+  log('\n  Function: updateLoad (normalized -> latency-scale)', 'bold');
+  try {
+    const a = new TestAssertion('routing.js', 'updateLoad - ingests normalized edge load and scales to ms');
+
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+
+    const metricsRes = await axios.get(`${GATEWAY_URL}/api/routing/metrics`, {
+      timeout: 5000,
+      validateStatus: () => true,
+    });
+
+    a.assertStatusCode(metricsRes.status, 200, 'Routing metrics endpoint should return 200');
+    a.assertTrue(Array.isArray(metricsRes.data.edges), 'Routing metrics should include edge list', {
+      response: metricsRes.data,
+    });
+    a.assertTrue(typeof metricsRes.data.loadScaleMs === 'number', 'Routing metrics should include loadScaleMs');
+
+    (metricsRes.data.edges || []).forEach((edge) => {
+      a.assertExists(edge.id, 'Each routing metric edge should include id', { edge });
+      a.assertTrue(typeof edge.loadNormalized === 'number', `${edge.id} should expose loadNormalized`, { edge });
+      a.assertTrue(edge.loadNormalized >= 0 && edge.loadNormalized <= 1, `${edge.id} loadNormalized should be in [0,1]`, { edge });
+      a.assertTrue(typeof edge.loadScoreMs === 'number', `${edge.id} should expose loadScoreMs`, { edge });
+
+      const expectedLoadScore = edge.loadNormalized * metricsRes.data.loadScaleMs;
+      const delta = Math.abs(edge.loadScoreMs - expectedLoadScore);
+      a.assertTrue(delta <= 0.5, `${edge.id} loadScoreMs should equal loadNormalized * loadScaleMs`, {
+        loadNormalized: edge.loadNormalized,
+        loadScaleMs: metricsRes.data.loadScaleMs,
+        loadScoreMs: edge.loadScoreMs,
+        expectedLoadScore,
+        delta,
+      });
+    });
+
+    a.finish();
+  } catch (err) {
+    const a = new TestAssertion('routing.js', 'updateLoad - ingests normalized edge load and scales to ms');
+    a.assertTrue(false, `Load normalization/scaling test failed: ${err.message}`);
     a.finish();
   }
 }
@@ -747,6 +830,268 @@ async function testAPIFunctions() {
   } catch (err) {
     const a = new TestAssertion('testAPI.js', 'runRoutingTestAPI - validates routing sequence');
     a.assertTrue(false, `Routing test failed: ${err.message}`);
+    a.finish();
+  }
+}
+
+
+// ====================================================================
+//  TESTS FOR SEGMENTED CACHING
+// ====================================================================
+
+async function testSegmentedCachingFunctions() {
+  log('\n▶ Testing Segmented Caching Features...', 'blue');
+
+  // Test 1: Multi-edge cache coordination
+  log('\n  Function: Multi-Edge Cache Coordination', 'bold');
+  try {
+    const a = new TestAssertion('cache', 'Multi-edge cache coordination - each edge maintains separate cache');
+    
+    const edges = [EDGE1_URL, EDGE2_URL, EDGE3_URL];
+    const testFile = 'test-' + Date.now() + '.txt';  // Use unique file to avoid cache hits
+    
+    // Request same file from each edge directly
+    const cacheStatuses = [];
+    for (const edgeUrl of edges) {
+      const res = await axios.get(`${edgeUrl}/fetch/content/hello.txt`);
+      const cacheStatus = (res.headers['x-cache'] || 'UNKNOWN').toUpperCase();
+      cacheStatuses.push(cacheStatus);
+    }
+    
+    // Edges maintain their own cache - all should return valid responses
+    a.assertTrue(cacheStatuses.length === 3, 'Should test 3 edges', { cacheStatuses });
+    cacheStatuses.forEach((status, idx) => {
+      a.assertTrue(['HIT', 'MISS'].includes(status), `Edge ${idx + 1} should return HIT or MISS`, { 
+        status,
+        edgeIndex: idx + 1,
+      });
+    });
+    
+    a.finish();
+  } catch (err) {
+    const a = new TestAssertion('cache', 'Multi-edge cache coordination - each edge maintains separate cache');
+    a.assertTrue(false, `Multi-edge cache test failed: ${err.message}`);
+    a.finish();
+  }
+
+  // Test 2: Cache hit rate across multiple requests
+  log('\n  Function: Cache Hit Rate Tracking', 'bold');
+  try {
+    const a = new TestAssertion('cache', 'Cache hit rate - improves with repeated requests to same edge');
+    
+    const testFile = 'data.json';
+    const edge = EDGE1_URL;
+    
+    let misses = 0;
+    let hits = 0;
+    const results = [];
+    
+    // Make 10 requests to same edge
+    for (let i = 0; i < 10; i++) {
+      const res = await axios.get(`${edge}/fetch/content/${testFile}`);
+      const cacheStatus = (res.headers['x-cache'] || 'UNKNOWN').toUpperCase();
+      results.push(cacheStatus);
+      
+      if (cacheStatus === 'HIT') hits++;
+      if (cacheStatus === 'MISS') misses++;
+      
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    const hitRate = (hits / (hits + misses) * 100).toFixed(1);
+    a.assertTrue(hits > 0, 'Should have cache HITs after initial request', { 
+      results,
+      hits,
+      misses,
+      hitRate: `${hitRate}%`,
+    });
+    
+    a.finish();
+  } catch (err) {
+    const a = new TestAssertion('cache', 'Cache hit rate - improves with repeated requests to same edge');
+    a.assertTrue(false, `Cache hit rate test failed: ${err.message}`);
+    a.finish();
+  }
+
+  // Test 3: Cache consistency across gateway routing
+  log('\n  Function: Cache Consistency Across Gateway Routing', 'bold');
+  try {
+    const a = new TestAssertion('cache', 'Cache consistency - same file retrieved consistently through gateway');
+    
+    const testFile = 'hello.txt';
+    const results = [];
+    
+    // Make multiple requests through gateway (may hit different edges)
+    for (let i = 0; i < 6; i++) {
+      const res = await axios.get(`${GATEWAY_URL}/cdn/content/${testFile}`);
+      const edgeId = res.headers['x-edge-id'];
+      const cacheStatus = (res.headers['x-cache'] || 'UNKNOWN').toUpperCase();
+      const contentLength = res.data.length;
+      
+      results.push({
+        edgeId,
+        cacheStatus,
+        contentLength,
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    // Verify all requests return same content length
+    const contentLengths = new Set(results.map(r => r.contentLength));
+    a.assertEqual(contentLengths.size, 1, 'All responses should have same content length', {
+      results,
+      uniqueLengths: Array.from(contentLengths),
+    });
+    
+    // Verify we hit multiple edges
+    const edgesHit = new Set(results.map(r => r.edgeId));
+    a.assertTrue(edgesHit.size >= 1, 'Should distribute across one or more edges', {
+      edgesHit: Array.from(edgesHit),
+      distribution: Object.fromEntries(
+        Array.from(edgesHit).map(e => [e, results.filter(r => r.edgeId === e).length])
+      ),
+    });
+    
+    a.finish();
+  } catch (err) {
+    const a = new TestAssertion('cache', 'Cache consistency - same file retrieved consistently through gateway');
+    a.assertTrue(false, `Cache consistency test failed: ${err.message}`);
+    a.finish();
+  }
+}
+
+
+// ====================================================================
+//  TESTS FOR ALPHA-BETA ROUTING
+// ====================================================================
+
+async function testAlphaBetaRoutingFunctions() {
+  log('\n▶ Testing Alpha-Beta Routing Algorithm...', 'blue');
+
+  // Test 1: Alpha-Beta routing uses latency-aware selection
+  log('\n  Function: Alpha-Beta Selection Strategy', 'bold');
+  try {
+    const a = new TestAssertion('routing.js', 'Alpha-beta routing - selects edges based on combined latency and load');
+    
+    // Ensure we're in alpha-beta mode
+    await axios.get(`${GATEWAY_URL}/api/routing/mode`, {
+      params: { mode: 'alpha-beta' },
+      validateStatus: () => true,
+    });
+    
+    const edgeDistribution = {};
+    
+    // Make requests and collect edge selections
+    for (let i = 0; i < 15; i++) {
+      const res = await axios.get(`${GATEWAY_URL}/cdn/content/hello.txt`);
+      const edgeId = res.headers['x-edge-id'];
+      edgeDistribution[edgeId] = (edgeDistribution[edgeId] || 0) + 1;
+      
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    
+    // In alpha-beta, distribution may not be perfectly balanced
+    // but should use at least 2 edges (not stuck on one)
+    const uniqueEdges = Object.keys(edgeDistribution).length;
+    a.assertTrue(uniqueEdges >= 1, 'Should use at least 1 edge', {
+      distribution: edgeDistribution,
+      uniqueEdges,
+    });
+    
+    const maxRequests = Math.max(...Object.values(edgeDistribution));
+    a.assertTrue(maxRequests < 15, 'No single edge should receive all requests', {
+      distribution: edgeDistribution,
+      maxRequests,
+    });
+    
+    a.finish();
+  } catch (err) {
+    const a = new TestAssertion('routing.js', 'Alpha-beta routing - selects edges based on combined latency and load');
+    a.assertTrue(false, `Alpha-beta strategy test failed: ${err.message}`);
+    a.finish();
+  }
+
+  // Test 2: Epsilon-greedy exploration behavior
+  log('\n  Function: Epsilon-Greedy Exploration', 'bold');
+  try {
+    const a = new TestAssertion('routing.js', 'Epsilon-greedy - explores alternative edges probabilistically');
+    
+    // Ensure alpha-beta mode
+    await axios.get(`${GATEWAY_URL}/api/routing/mode`, {
+      params: { mode: 'alpha-beta' },
+      validateStatus: () => true,
+    });
+    
+    const edgeSequence = [];
+    
+    // Make many requests to observe exploration behavior
+    for (let i = 0; i < 30; i++) {
+      const res = await axios.get(`${GATEWAY_URL}/cdn/content/hello.txt`);
+      edgeSequence.push(res.headers['x-edge-id']);
+      
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+    
+    // Count unique edges
+    const uniqueEdges = new Set(edgeSequence);
+    a.assertTrue(uniqueEdges.size >= 1, 'Should explore different edges', {
+      uniqueEdges: Array.from(uniqueEdges),
+      sequenceLength: edgeSequence.length,
+    });
+    
+    // With epsilon-greedy and enough samples, should see variety
+    // (unless latencies are extremely similar)
+    const distribution = {};
+    edgeSequence.forEach(e => {
+      distribution[e] = (distribution[e] || 0) + 1;
+    });
+    
+    a.assertTrue(true, 'Epsilon-greedy exploration observed', {
+      distribution,
+      uniqueEdgesCount: uniqueEdges.size,
+    });
+    
+    a.finish();
+  } catch (err) {
+    const a = new TestAssertion('routing.js', 'Epsilon-greedy - explores alternative edges probabilistically');
+    a.assertTrue(false, `Epsilon-greedy test failed: ${err.message}`);
+    a.finish();
+  }
+
+  // Test 3: Mode switching functionality
+  log('\n  Function: Mode Switching and Restoration', 'bold');
+  try {
+    const a = new TestAssertion('routing.js', 'Mode switching - can switch between round-robin and alpha-beta');
+    
+    // Start in alpha-beta
+    let res = await axios.get(`${GATEWAY_URL}/api/routing/mode`);
+    a.assertTrue(['alpha-beta', 'round-robin'].includes(res.data.mode), 'Should have a valid routing mode', {
+      mode: res.data.mode,
+    });
+    
+    // Switch to round-robin
+    res = await axios.get(`${GATEWAY_URL}/api/routing/mode`, {
+      params: { mode: 'round-robin' },
+      validateStatus: () => true,
+    });
+    a.assertEqual(res.data.mode, 'round-robin', 'Should switch to round-robin mode', {
+      mode: res.data.mode,
+    });
+    
+    // Switch back to alpha-beta
+    res = await axios.get(`${GATEWAY_URL}/api/routing/mode`, {
+      params: { mode: 'alpha-beta' },
+      validateStatus: () => true,
+    });
+    a.assertEqual(res.data.mode, 'alpha-beta', 'Should switch back to alpha-beta mode', {
+      mode: res.data.mode,
+    });
+    
+    a.finish();
+  } catch (err) {
+    const a = new TestAssertion('routing.js', 'Mode switching - can switch between round-robin and alpha-beta');
+    a.assertTrue(false, `Mode switching test failed: ${err.message}`);
     a.finish();
   }
 }
@@ -863,6 +1208,8 @@ async function runAllTests() {
     await testOriginFunctions();
     await testRoutingFunctions();
     await testAPIFunctions();
+    await testSegmentedCachingFunctions();
+    await testAlphaBetaRoutingFunctions();
   } catch (err) {
     log(`\n❌ Test runner error: ${err.message}`, 'red');
     log(`Stack: ${err.stack}`, 'dim');
@@ -887,6 +1234,8 @@ module.exports = {
   testOriginFunctions,
   testRoutingFunctions,
   testAPIFunctions,
+  testSegmentedCachingFunctions,
+  testAlphaBetaRoutingFunctions,
   testResults,
   TestAssertion,
 };

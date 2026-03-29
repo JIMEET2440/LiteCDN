@@ -30,6 +30,7 @@ const { runAllTests  } = require('../../testing/unitTests');
 const app     = express();
 const PORT    = config.cdn.port;
 const router  = new RoutingService();    // uses config.edges by default
+const METRICS_POLL_INTERVAL_MS = Number(process.env.METRICS_POLL_INTERVAL_MS || 1000);
 
 // Enable CORS so the frontend (if any) can call the gateway
 app.use(cors({
@@ -129,11 +130,32 @@ function handleStatusRequest(_req, res) {
       alpha: router.alpha,
       beta: router.beta,
       epsilon: router.epsilon,
+      loadScaleMs: router.loadScaleMs,
       mode: router.getMode(),
     },
     currentIndex: router.getCurrentIndex(),
     edges: router.getEdgeList(),
+    routingMetrics: router.getMetrics(),
   });
+}
+
+async function pollEdgeMetrics() {
+  const edges = router.getEdgeList();
+
+  await Promise.all(edges.map(async (edge) => {
+    try {
+      const metricsRes = await axios.get(`${edge.url}/metrics`, {
+        timeout: 500,
+        validateStatus: () => true,
+      });
+
+      if (metricsRes.status === 200 && typeof metricsRes.data?.loadNormalized === 'number') {
+        router.updateLoad(edge.id, metricsRes.data.loadNormalized);
+      }
+    } catch (_err) {
+      // Metrics polling is best-effort and should not affect request flow.
+    }
+  }));
 }
 // ── Test API Endpoints ───────────────────────────────────────
 //    Dashboard endpoints to run tests and return JSON results
@@ -208,6 +230,16 @@ app.get('/api/routing/modes', (_req, res) => {
   });
 });
 
+app.get('/api/routing/metrics', (_req, res) => {
+  res.json({
+    mode: router.getMode(),
+    alpha: router.alpha,
+    beta: router.beta,
+    loadScaleMs: router.loadScaleMs,
+    edges: router.getMetrics(),
+  });
+});
+
 // ── Route Registrations ───────────────────────────────────────
 
 app.use(logRequestMiddleware);
@@ -226,6 +258,16 @@ app.listen(PORT, () => {
   console.log(`  [CDNSystem] ✅  Gateway running on http://localhost:${PORT}`);
   console.log(`  [CDNSystem] 🔗  Edges: ${router.getEdgeList().map(e => e.id).join(', ')}`);
   console.log('='.repeat(56));
+});
+
+setInterval(() => {
+  pollEdgeMetrics().catch(() => {
+    // Prevent unhandled rejections from crashing the gateway.
+  });
+}, METRICS_POLL_INTERVAL_MS);
+
+pollEdgeMetrics().catch(() => {
+  // Initial best-effort warm-up.
 });
 
 module.exports = app;

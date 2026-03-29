@@ -33,7 +33,8 @@ class RoutingService {
       ...e,
       url: `http://${e.host}:${e.port}`,
       latency: 0,    // Track latency for scoring
-      load: 0,       // Track load for scoring
+      load: 0,       // Latency-scale load contribution (ms) for scoring
+      loadNormalized: 0, // Raw normalized load in [0,1]
     }));
 
     // ── Weighting Parameters ───────────────────────────────
@@ -41,6 +42,7 @@ class RoutingService {
     this.alpha = 0.5;  // Weight for latency in score calculation
     this.beta = 0.5;   // Weight for load in score calculation
     this.epsilon = 0.25; // epsilon-greedy exploration probability
+    this.loadScaleMs = Number(process.env.ROUTING_LOAD_SCALE_MS || 100);
     this._mode = (process.env.ROUTING_MODE || 'alpha-beta'); // 'alpha-beta' or 'round-robin'
 
     // Stagnation/perturbation bookkeeping
@@ -181,15 +183,37 @@ class RoutingService {
   }
 
   /**
-   * Update load metric for an edge. Load should be a normalized [0..1]
-   * indicator (higher = more loaded). Called by external pollers or
-   * via health checks. Returns false if edge not found.
+   * Update load metric for an edge.
+   *
+   * Input loadValue should be normalized in [0..1]. We keep both:
+   * - loadNormalized: raw unitless signal for observability
+   * - load: latency-equivalent contribution in ms for fair scoring
+   *
+   *   loadScoreMs = clamp(loadValue, 0, 1) * loadScaleMs
+   *
+   * This ensures latency and load are on comparable scales in
+   * Score = alpha*latencyMs + beta*loadScoreMs.
    */
   updateLoad(edgeId, loadValue) {
     const e = this.edges.find((x) => x.id === edgeId);
     if (!e) return false;
-    e.load = Math.max(0, Math.min(1, loadValue));
+    const normalized = Math.max(0, Math.min(1, Number(loadValue) || 0));
+    e.loadNormalized = normalized;
+    e.load = normalized * this.loadScaleMs;
     return true;
+  }
+
+  /**
+   * Return current edge metrics and derived score components.
+   */
+  getMetrics() {
+    return this.edges.map((e) => ({
+      id: e.id,
+      latencyMs: e.latency || 0,
+      loadNormalized: e.loadNormalized || 0,
+      loadScoreMs: e.load || 0,
+      score: this.alpha * (e.latency || 0) + this.beta * (e.load || 0),
+    }));
   }
 
   /**

@@ -433,8 +433,15 @@
         <span class="loader" id="cache-loader" style="display: none;"></span>
       </button>
       <button onclick="testRouting()">
-        Routing Test
+        Routing Test (Selected Mode)
         <span class="loader" id="routing-loader" style="display: none;"></span>
+      </button>
+      <select id="routing-mode" style="max-width: 210px; min-width: 180px; margin-left: 0.25rem;">
+        <option value="round-robin">round-robin</option>
+        <option value="alpha-beta" selected>alpha-beta</option>
+      </select>
+      <button onclick="compareRoutingModes()">
+        Compare RR vs Alpha-Beta
       </button>
       <button onclick="clearUI()" style="margin-left: auto;">Clear Results</button>
     </div>
@@ -712,29 +719,93 @@
     async function testRouting() {
       showLoader('routing');
       try {
-        const res = await fetch(`${GATEWAY_URL}/api/tests/routing`);
+        const mode = document.getElementById('routing-mode').value;
+        await fetch(`${GATEWAY_URL}/api/routing/mode?mode=${encodeURIComponent(mode)}`);
+
+        const res = await fetch(`${GATEWAY_URL}/api/tests/routing?mode=${encodeURIComponent(mode)}`);
         const data = await res.json();
         
         if (data.summary) {
-          const accuracy = ((data.summary.correctCount / data.summary.totalRequests) * 100).toFixed(1);
-          let html = `
-            <div class="metrics">
-              <div class="metric-box">
-                <div class="metric-value">${data.summary.correctCount}</div>
-                <div class="metric-label">Correct</div>
-              </div>
-              <div class="metric-box">
-                <div class="metric-value">${data.summary.totalRequests - data.summary.correctCount}</div>
-                <div class="metric-label">Incorrect</div>
-              </div>
-              <div class="metric-box">
-                <div class="metric-value">${accuracy}%</div>
-                <div class="metric-label">Accuracy</div>
-              </div>
-            </div>`;
+          let html = '';
+          if (mode === 'round-robin') {
+            const accuracy = Number(data.summary.accuracy).toFixed(1);
+            html = `
+              <div class="metrics">
+                <div class="metric-box">
+                  <div class="metric-value">${data.summary.correctCount}</div>
+                  <div class="metric-label">Correct</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-value">${data.summary.totalRequests - data.summary.correctCount}</div>
+                  <div class="metric-label">Incorrect</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-value">${accuracy}%</div>
+                  <div class="metric-label">RR Accuracy</div>
+                </div>
+              </div>`;
+            addLogEntry('Routing Test', 'round-robin', accuracy === '100.0' ? 'Perfect' : 'Measured', `${accuracy}%`);
+          } else {
+            html = `
+              <div class="metrics">
+                <div class="metric-box">
+                  <div class="metric-value">${data.summary.uniqueEdgesUsed}</div>
+                  <div class="metric-label">Edges Used</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-value">${data.summary.spread}</div>
+                  <div class="metric-label">Spread</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-value">${data.summary.totalRequests}</div>
+                  <div class="metric-label">Requests</div>
+                </div>
+              </div>`;
+            addLogEntry('Routing Test', 'alpha-beta', 'Measured', `spread=${data.summary.spread}`);
+          }
+
+          html += `<div style="margin-top:0.6rem; color: var(--muted); font-size: 0.78rem;">Mode: ${mode}</div>`;
           document.getElementById('routing-stats').innerHTML = html;
-          addLogEntry('Routing Test', 'Complete', accuracy === '100' ? 'Perfect' : 'Good', accuracy);
         }
+      } catch (err) {
+        document.getElementById('routing-stats').innerHTML = `<div style="color: var(--red);">Error: ${err.message}</div>`;
+      } finally {
+        hideLoader('routing');
+      }
+    }
+
+    async function compareRoutingModes() {
+      showLoader('routing');
+      try {
+        const res = await fetch(`${GATEWAY_URL}/api/tests/routing/compare`);
+        const data = await res.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        const rr = data.roundRobin?.summary || {};
+        const ab = data.alphaBeta?.summary || {};
+        const html = `
+          <div class="metrics">
+            <div class="metric-box">
+              <div class="metric-value">${rr.accuracy || '--'}%</div>
+              <div class="metric-label">RR Accuracy</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-value">${ab.uniqueEdgesUsed ?? '--'}</div>
+              <div class="metric-label">AB Edges Used</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-value">${ab.spread ?? '--'}</div>
+              <div class="metric-label">AB Spread</div>
+            </div>
+          </div>
+          <div style="margin-top:0.6rem; color: var(--muted); font-size: 0.78rem;">Compared round-robin and alpha-beta in one run.</div>
+        `;
+
+        document.getElementById('routing-stats').innerHTML = html;
+        addLogEntry('Routing Compare', 'Complete', 'Compared', `RR=${rr.accuracy || '--'}%, AB spread=${ab.spread ?? '--'}`);
       } catch (err) {
         document.getElementById('routing-stats').innerHTML = `<div style="color: var(--red);">Error: ${err.message}</div>`;
       } finally {
@@ -801,7 +872,18 @@
       requestCount = 0;
     }
 
-    window.addEventListener('load', initializeServers);
+    window.addEventListener('load', async () => {
+      initializeServers();
+      try {
+        const res = await fetch(`${GATEWAY_URL}/api/routing/mode`);
+        const data = await res.json();
+        if (data && data.mode) {
+          document.getElementById('routing-mode').value = data.mode;
+        }
+      } catch (_err) {
+        // Keep default dropdown value if API is unavailable.
+      }
+    });
   </script>
 </body>
 </html>

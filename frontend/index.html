@@ -25,6 +25,7 @@
       </select>
       <label for="gateway">CDN Gateway</label>
       <input id="gateway" value="http://localhost:3000" />
+      <div style="color: var(--muted); font-size: 0.82rem; margin: 0.25rem 0 0.9rem;">Production routing: alpha-beta</div>
       <button onclick="sendRequest()">Fetch via CDN</button>
     </div>
 
@@ -69,6 +70,7 @@
           <span class="badge ${cacheStatus === 'HIT' ? 'hit' : 'miss'}">${cacheStatus}</span>
           <span class="badge edge">${edgeId}</span>
           <span class="badge time">${ms} ms</span>
+          <span class="badge edge">mode: alpha-beta</span>
         `;
 
         // Body

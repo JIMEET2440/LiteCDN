@@ -111,8 +111,64 @@ const missCounters = new Map();
 // ── Create Express App ───────────────────────────────────────
 const app = express();
 
+// ── Runtime Load Metrics ──────────────────────────────────────
+const EDGE_MAX_INFLIGHT = Number(process.env.EDGE_MAX_INFLIGHT || 100);
+const EDGE_MAX_RPS = Number(process.env.EDGE_MAX_RPS || 80);
+const EDGE_LOAD_ALPHA = 0.2; // EWMA smoothing for load signal
+
+let activeRequests = 0;
+let totalRequests = 0;
+let windowRequestCount = 0;
+let avgResponseTimeMs = 0;
+let smoothedLoadNormalized = 0;
+let requestsPerSecond = 0;
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function computeLoadComponents() {
+  const capacityRatio = CACHE_CAPACITY > 0 ? getTotalCacheSize() / CACHE_CAPACITY : 0;
+  const inflightRatio = EDGE_MAX_INFLIGHT > 0 ? activeRequests / EDGE_MAX_INFLIGHT : 0;
+  const requestRateRatio = EDGE_MAX_RPS > 0 ? requestsPerSecond / EDGE_MAX_RPS : 0;
+
+  // Weighted pressure model. We keep cache pressure lighter than active load.
+  const rawLoad = (0.5 * inflightRatio) + (0.35 * requestRateRatio) + (0.15 * capacityRatio);
+  return {
+    inflightRatio: clamp01(inflightRatio),
+    requestRateRatio: clamp01(requestRateRatio),
+    capacityRatio: clamp01(capacityRatio),
+    rawLoad: clamp01(rawLoad),
+  };
+}
+
+setInterval(() => {
+  requestsPerSecond = windowRequestCount;
+  windowRequestCount = 0;
+
+  const components = computeLoadComponents();
+  smoothedLoadNormalized =
+    EDGE_LOAD_ALPHA * components.rawLoad
+    + (1 - EDGE_LOAD_ALPHA) * smoothedLoadNormalized;
+}, 1000);
+
 // ── Logging Middleware ───────────────────────────────────────
-app.use((req, _res, next) => {
+app.use((req, res, next) => {
+  const reqStart = Date.now();
+  activeRequests += 1;
+  totalRequests += 1;
+  windowRequestCount += 1;
+
+  res.on('finish', () => {
+    activeRequests = Math.max(0, activeRequests - 1);
+    const duration = Date.now() - reqStart;
+    if (!avgResponseTimeMs || avgResponseTimeMs === 0) {
+      avgResponseTimeMs = duration;
+    } else {
+      avgResponseTimeMs = EDGE_LOAD_ALPHA * duration + (1 - EDGE_LOAD_ALPHA) * avgResponseTimeMs;
+    }
+  });
+
   console.log(`[${EDGE_ID}] 📥  ${req.method} ${req.url}`);
   next();
 });
@@ -457,6 +513,8 @@ app.get('/fetch/*', async (req, res) => {
 
 // ── Health Check ─────────────────────────────────────────────
 app.get('/health', (_req, res) => {
+  const components = computeLoadComponents();
+
   res.json({
     status: 'UP',
     server: EDGE_ID,
@@ -468,6 +526,30 @@ app.get('/health', (_req, res) => {
       [SEGMENTS.POPULAR]: cacheSegments[SEGMENTS.POPULAR].size,
       [SEGMENTS.MISS_AWARE]: cacheSegments[SEGMENTS.MISS_AWARE].size,
     },
+    metrics: {
+      activeRequests,
+      requestsPerSecond,
+      avgResponseTimeMs: Number(avgResponseTimeMs.toFixed(2)),
+      loadNormalized: Number(smoothedLoadNormalized.toFixed(4)),
+      components,
+    },
+  });
+});
+
+app.get('/metrics', (_req, res) => {
+  const components = computeLoadComponents();
+
+  res.json({
+    edgeId: EDGE_ID,
+    activeRequests,
+    totalRequests,
+    requestsPerSecond,
+    avgResponseTimeMs: Number(avgResponseTimeMs.toFixed(2)),
+    cacheSize: getTotalCacheSize(),
+    cacheCapacity: CACHE_CAPACITY,
+    loadNormalized: Number(smoothedLoadNormalized.toFixed(4)),
+    components,
+    timestamp: Date.now(),
   });
 });
 
