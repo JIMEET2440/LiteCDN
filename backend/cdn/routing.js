@@ -45,11 +45,8 @@ class RoutingService {
     this.loadScaleMs = Number(process.env.ROUTING_LOAD_SCALE_MS || 100);
     this._mode = (process.env.ROUTING_MODE || 'alpha-beta'); // 'alpha-beta' or 'round-robin'
 
-    // Stagnation/perturbation bookkeeping
-    this._lastSelectedId = null;
-    this._stagnationCount = 0;
-    this._stagnationThreshold = 10; // after this, perturb alpha/beta slightly
-    this._perturbMagnitude = 0.05; // bounded perturbation amount
+    // Small bounded per-selection weight adjustment magnitude.
+    this._perturbMagnitude = 0.05;
 
     // ── Round-Robin Index ──────────────────────────────────
     //    Points to the *last* edge that was selected.
@@ -101,13 +98,14 @@ class RoutingService {
       this._currentIndex = (this._currentIndex + 1) % this.edges.length;
       const selected = this.edges[this._currentIndex];
       console.log(`[RoutingService] 🔀 Round-Robin → selected ${selected.id} (${selected.url})`);
-      // stagnation accounting
-      this._updateStagnation(selected.id);
       return selected;
     }
 
     // Alpha-Beta scoring mode
     const eps = (typeof overrideEpsilon === 'number') ? overrideEpsilon : this.epsilon;
+
+    // Adjust alpha/beta slightly based on current latency/load spread.
+    this._adjustWeightsFromMetrics();
 
     // Compute scores (lower is better)
     const scored = this.edges.map((e) => ({
@@ -127,30 +125,33 @@ class RoutingService {
     const selected = scored[pickIndex].edge;
     console.log(`[RoutingService] 🔎 Alpha-Beta → chosen ${selected.id} (score=${scored[pickIndex].score.toFixed(2)})`);
 
-    // Stagnation handling and bounded perturbation
-    this._updateStagnation(selected.id);
-
     return selected;
   }
 
-  _updateStagnation(selectedId) {
-    if (this._lastSelectedId === selectedId) {
-      this._stagnationCount += 1;
-    } else {
-      this._stagnationCount = 1;
-      this._lastSelectedId = selectedId;
+  _adjustWeightsFromMetrics() {
+    if (!Array.isArray(this.edges) || this.edges.length === 0) {
+      return;
     }
 
-    if (this._stagnationCount >= this._stagnationThreshold) {
-      // Perturb alpha slightly within bounds [0.05 .. 0.95]
-      const delta = (Math.random() * 2 - 1) * this._perturbMagnitude; // in [-mag, mag]
-      let newAlpha = this.alpha + delta;
-      newAlpha = Math.max(0.05, Math.min(0.95, newAlpha));
-      this.alpha = newAlpha;
-      this.beta = 1 - this.alpha;
-      console.log(`[RoutingService] ⚖️  Perturbed weights due to stagnation: alpha=${this.alpha.toFixed(2)}, beta=${this.beta.toFixed(2)}`);
-      this._stagnationCount = 0; // reset
+    const latencies = this.edges.map((e) => Number(e.latency) || 0);
+    const loads = this.edges.map((e) => Number(e.load) || 0);
+
+    const latencySpread = Math.max(...latencies) - Math.min(...latencies);
+    const loadSpread = Math.max(...loads) - Math.min(...loads);
+    const totalSpread = latencySpread + loadSpread;
+
+    // No signal to adapt from.
+    if (totalSpread <= 0) {
+      return;
     }
+
+    // Higher latency spread -> slightly higher alpha.
+    const targetAlpha = Math.max(0.05, Math.min(0.95, latencySpread / totalSpread));
+    const rawDelta = targetAlpha - this.alpha;
+    const boundedDelta = Math.max(-this._perturbMagnitude, Math.min(this._perturbMagnitude, rawDelta));
+
+    this.alpha = Math.max(0.05, Math.min(0.95, this.alpha + boundedDelta));
+    this.beta = 1 - this.alpha;
   }
 
   /**
