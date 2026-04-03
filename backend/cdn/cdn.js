@@ -1,273 +1,97 @@
-/**
- * ============================================================
- *  LiteCDN – CDN System / Gateway Router
- * ============================================================
- *  This is the **main entry-point** that clients hit.
- *  It acts as a reverse-proxy: for every incoming request it
- *  uses the RoutingService to pick an Edge Server via
- *  round-robin, then proxies the request to that edge and
- *  streams the response back to the client.
- *
- *  Endpoints
- *  ---------
- *  GET /cdn/*      →  Routed to an Edge Server
- *  GET /health     →  Gateway health-check
- *  GET /status     →  Shows edge list & current RR index
- *
- *  Flow: Client → CDNSystem → EdgeServer → (cache / Origin)
- * ============================================================
- */
-
-const express        = require('express');
-const axios          = require('axios');
-const cors           = require('cors');
-const config         = require('../config');
+const express = require('express');
+const axios = require('axios');
+const cors = require('cors');
+const config = require('../config');
 const RoutingService = require('./routing');
-const testAPI        = require('./testAPI');
-const { runAllTests  } = require('../../testing/unitTests');
 
-// ── Initialise ───────────────────────────────────────────────
-const app     = express();
-const PORT    = config.cdn.port;
-const router  = new RoutingService();    // uses config.edges by default
-const METRICS_POLL_INTERVAL_MS = Number(process.env.METRICS_POLL_INTERVAL_MS || 1000);
+const app = express();
+app.use(cors());
 
-// Enable CORS so the frontend (if any) can call the gateway
-app.use(cors({
-  exposedHeaders: ['X-Cache', 'X-Edge-Id', 'X-CDN', 'X-Response-Time'],
-}));
+const PORT = config.cdn.port;
+const GATEWAY_NAME = 'CDNSystem';
 
-// ── Serve Frontend (Dashboard) ───────────────────────────────
-const path = require('path');
-app.use(express.static(path.join(__dirname, '../../frontend')));
+const routingService = new RoutingService(config.edges);
+let edgeMetrics = {};
 
-// ── Handler Functions ────────────────────────────────────────
-
-/**
- * Logs incoming requests for debugging purposes
- */
-function logRequestMiddleware(req, _res, next) {
-  console.log(`\n[CDNSystem] ════════════════════════════════════`);
-  console.log(`[CDNSystem] 📥  Request received: ${req.method} ${req.url}`);
-  next();
-}
-
-/**
- * Main CDN request handler
- * Routes requests to edge servers and proxies responses back
- */
-async function handleCDNRequest(req, res) {
-  const startTime = Date.now();
-
-  // 1. Determine the origin-style path from the URL
-  const resourcePath = req.params[0];          // e.g. "content/hello.txt"
-
-  // 2. Use RoutingService to pick the next Edge Server
-  const edge = router.selectEdge();
-  console.log(`[CDNSystem] 🔀 Routed to ${edge.id} (${edge.url})`);
-
-  // 3. Build the URL to the Edge Server's /fetch endpoint
-  const edgeURL = `${edge.url}/fetch/${resourcePath}`;
-  console.log(`[CDNSystem] ➡️  Forwarding to: ${edgeURL}`);
-
-  try {
-    // 4. Proxy the request to the Edge Server
-    const edgeResponse = await axios.get(edgeURL, {
-      responseType: 'arraybuffer',
-      validateStatus: (status) => status < 500,
-    });
-
-    // 5. Relay headers back to the client
-    const contentType = edgeResponse.headers['content-type'] || 'application/octet-stream';
-    const cacheStatus = edgeResponse.headers['x-cache'] || 'UNKNOWN';
-    const edgeId      = edgeResponse.headers['x-edge-id'] || edge.id;
-    const elapsed     = Date.now() - startTime;
-
-    res.set('Content-Type', contentType);
-    res.set('X-Cache', cacheStatus);
-    res.set('X-Edge-Id', edgeId);
-    res.set('X-CDN', 'LiteCDN');
-    res.set('X-Response-Time', `${elapsed}ms`);
-
-    console.log(`[CDNSystem] ✅  Response from ${edgeId} | Cache: ${cacheStatus} | Served in ${elapsed}ms`);
-
-    // Update router metrics (simple latency reporting). Load can be
-    // updated by a separate poller if implemented later.
+// Fetch metrics
+setInterval(async () => {
+  const promises = config.edges.map(async (edge) => {
     try {
-      router.updateLatency(edge.id, elapsed);
+      const res = await axios.get(`http://${edge.host}:${edge.port}/metrics`);
+      edgeMetrics[edge.id] = { status: 'UP', ...res.data };
     } catch (err) {
-      // non-fatal
+      edgeMetrics[edge.id] = { status: 'DOWN', latency: 9999, load: 0 };
     }
-
-    return res.status(edgeResponse.status).send(edgeResponse.data);
-
-  } catch (err) {
-    const elapsed = Date.now() - startTime;
-    console.error(`[CDNSystem] 🚨 Error contacting ${edge.id}:`, err.message, `| ${elapsed}ms`);
-    return res.status(502).json({
-      error: `Bad Gateway – could not reach ${edge.id}`,
-      details: err.message,
-    });
-  }
-}
-
-/**
- * Health check endpoint
- */
-function handleHealthCheck(_req, res) {
-  res.json({ status: 'UP', server: 'CDNSystem', port: PORT });
-}
-
-/**
- * Status endpoint for debugging
- */
-function handleStatusRequest(_req, res) {
-  res.json({
-    server: 'CDNSystem',
-    port: PORT,
-    routingStrategy: router.getMode() === 'round-robin' ? 'Round-Robin' : 'Alpha-Beta (latency·alpha + load·beta)',
-    routingParams: {
-      alpha: router.alpha,
-      beta: router.beta,
-      epsilon: router.epsilon,
-      loadScaleMs: router.loadScaleMs,
-      mode: router.getMode(),
-    },
-    currentIndex: router.getCurrentIndex(),
-    edges: router.getEdgeList(),
-    routingMetrics: router.getMetrics(),
   });
-}
+  await Promise.all(promises);
+}, 50);
 
-async function pollEdgeMetrics() {
-  const edges = router.getEdgeList();
+// Tracking local requests to avoid Stale State metrics
+const inFlightRequests = {};
+config.edges.forEach(e => inFlightRequests[e.id] = 0);
 
-  await Promise.all(edges.map(async (edge) => {
+app.post('/policy/routing', express.json(), (req, res) => {
+  const { mode, ...options } = req.body;
+  if (!['round-robin', 'alpha-beta'].includes(mode)) {
+    return res.status(400).json({ error: 'Unsupported routing mode' });
+  }
+  routingService.setMode(mode, options);
+  res.json({ message: `Routing policy set to ${mode}`, options });
+});
+
+app.post('/policy/cache', express.json(), async (req, res) => {
+  const { mode, size } = req.body;
+  const promises = config.edges.map(async (edge) => {
     try {
-      const metricsRes = await axios.get(`${edge.url}/metrics`, {
-        timeout: 500,
-        validateStatus: () => true,
-      });
-
-      if (metricsRes.status === 200 && typeof metricsRes.data?.loadNormalized === 'number') {
-        router.updateLoad(edge.id, metricsRes.data.loadNormalized);
-      }
-    } catch (_err) {
-      // Metrics polling is best-effort and should not affect request flow.
+      await axios.post(`http://${edge.host}:${edge.port}/policy/cache`, { mode, size });
+    } catch (e) {
+      console.log('Failed to update cache on', edge.id);
     }
-  }));
-}
-// ── Test API Endpoints ───────────────────────────────────────
-//    Dashboard endpoints to run tests and return JSON results
+  });
+  await Promise.all(promises);
+  res.json({ message: 'Global cache policy updated', mode, size });
+});
 
-app.get('/api/tests/run-all', async (_req, res) => {
+app.get('/cdn/content/:file', async (req, res) => {
+  const targetEdge = routingService.route(req, edgeMetrics, inFlightRequests);
+  if (!targetEdge) {
+    return res.status(503).json({ error: 'No edges available' });
+  }
+  
+  const cost = parseFloat(req.query.cost) || 1;
+
+  // Predictively model that this edge is now processing an additional request
+  inFlightRequests[targetEdge.id] = (inFlightRequests[targetEdge.id] || 0) + cost;
+  
   try {
-    const result = await runAllTests();
-    res.json(result);
-  } catch (err) {
-    console.error('Error running tests:', err);
-    res.status(500).json({ 
-      error: 'Failed to run tests', 
-      message: err.message,
-      summary: { total: 0, passed: 0, failed: 0, passRate: 0 },
-      results: { passed: [], failed: [] }
+    const url = `http://${targetEdge.host}:${targetEdge.port}/${'content/' + req.params.file}?cost=${cost}`;
+    const start = Date.now();
+    const edgeRes = await axios.get(url);
+    const latency = Date.now() - start;
+    
+    // Request finished, remove predictive penalty
+    inFlightRequests[targetEdge.id] = Math.max(0, inFlightRequests[targetEdge.id] - cost);
+    res.set('x-edge-id', targetEdge.id);
+    const isHit = edgeRes.data && edgeRes.data.cacheHit;
+    res.set('x-cache', isHit ? 'HIT' : 'MISS');
+    res.json({
+       edge: targetEdge.id,
+       latency,
+       data: edgeRes.data
     });
+  } catch (err) {
+    inFlightRequests[targetEdge.id] = Math.max(0, inFlightRequests[targetEdge.id] - cost);
+    res.status(500).json({ error: 'Edge fetch failed' });
   }
 });
 
-app.get('/api/tests/load', async (_req, res) => {
-  const gatewayBase = `http://localhost:${PORT}`;
-  const result = await testAPI.runLoadTestAPI(gatewayBase);
-  res.json(result);
-});
-
-app.get('/api/tests/cache', async (_req, res) => {
-  const gatewayBase = `http://localhost:${PORT}`;
-  const result = await testAPI.runCacheTestAPI(gatewayBase);
-  res.json(result);
-});
-
-app.get('/api/tests/routing', async (_req, res) => {
-  const gatewayBase = `http://localhost:${PORT}`;
-  const mode = _req.query.mode;
-  const result = mode
-    ? await testAPI.runRoutingTestByModeAPI(gatewayBase, mode)
-    : await testAPI.runRoutingTestAPI(gatewayBase);
-  res.json(result);
-});
-
-app.get('/api/tests/routing/compare', async (_req, res) => {
-  const gatewayBase = `http://localhost:${PORT}`;
-  const result = await testAPI.runRoutingCompareAPI(gatewayBase);
-  res.json(result);
-});
-
-app.get('/api/routing/mode', (req, res) => {
-  const mode = req.query.mode;
-
-  if (mode) {
-    const ok = router.setMode(mode);
-    if (!ok) {
-      return res.status(400).json({
-        error: 'Invalid routing mode',
-        allowed: ['round-robin', 'alpha-beta'],
-      });
-    }
-  }
-
-  return res.json({
-    mode: router.getMode(),
-    alpha: router.alpha,
-    beta: router.beta,
-    epsilon: router.epsilon,
-  });
-});
-
-app.get('/api/routing/modes', (_req, res) => {
-  res.json({
-    available: ['round-robin', 'alpha-beta'],
-    default: 'alpha-beta',
-  });
-});
-
-app.get('/api/routing/metrics', (_req, res) => {
-  res.json({
-    mode: router.getMode(),
-    alpha: router.alpha,
-    beta: router.beta,
-    loadScaleMs: router.loadScaleMs,
-    edges: router.getMetrics(),
-  });
-});
-
-// ── Route Registrations ───────────────────────────────────────
-
-app.use(logRequestMiddleware);
-app.get('/cdn/*', handleCDNRequest);
-app.get('/health', handleHealthCheck);
-app.get('/status', handleStatusRequest);
-
-// ── Catch-All 404 ────────────────────────────────────────────
-app.use((_req, res) => {
-  res.status(404).json({ error: 'Not found – use /cdn/<path> to fetch content' });
-});
-
-// ── Start Server ─────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log('='.repeat(56));
-  console.log(`  [CDNSystem] ✅  Gateway running on http://localhost:${PORT}`);
-  console.log(`  [CDNSystem] 🔗  Edges: ${router.getEdgeList().map(e => e.id).join(', ')}`);
-  console.log('='.repeat(56));
+    console.log(`[${GATEWAY_NAME}] routing traffic at ${config.cdn.url}`);
 });
-
-setInterval(() => {
-  pollEdgeMetrics().catch(() => {
-    // Prevent unhandled rejections from crashing the gateway.
+app.get('/status', (req, res) => {
+  res.json({
+    status: 'UP',
+    edges: config.edges,
+    metrics: edgeMetrics
   });
-}, METRICS_POLL_INTERVAL_MS);
-
-pollEdgeMetrics().catch(() => {
-  // Initial best-effort warm-up.
 });
-
-module.exports = app;
