@@ -1,0 +1,96 @@
+services:
+  origin:
+    build: .
+    command: node backend/origin/origin.js
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+    volumes:
+      - ./backend/origin/static:/app/backend/origin/static
+
+  cdn:
+    build: .
+    command: node backend/cdn/cdn.js
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - ORIGIN_HOST=origin
+      - ORIGIN_PORT=4000
+      # By default we configure edges 1 through 6
+      - EDGES=edge-1:3001,edge-2:3002,edge-3:3003,edge-4:3004,edge-5:3005,edge-6:3006
+    depends_on:
+      - origin
+      - edge-1
+      - edge-2
+      - edge-3
+      - edge-4
+      - edge-5
+      - edge-6
+
+  edge-1:
+    build: .
+    command: node backend/edge/edge.js
+    environment:
+      - PORT=3001
+      - EDGE_ID=Edge-1
+      - ORIGIN_HOST=origin
+      - ORIGIN_PORT=4000
+    depends_on:
+      - origin
+
+  edge-2:
+    build: .
+    command: node backend/edge/edge.js
+    environment:
+      - PORT=3002
+      - EDGE_ID=Edge-2
+      - ORIGIN_HOST=origin
+      - ORIGIN_PORT=4000
+    depends_on:
+      - origin
+
+  edge-3:
+    build: .
+    command: node backend/edge/edge.js
+    environment:
+      - PORT=3003
+      - EDGE_ID=Edge-3
+      - ORIGIN_HOST=origin
+      - ORIGIN_PORT=4000
+    depends_on:
+      - origin
+
+  edge-4:
+    build: .
+    command: node backend/edge/edge.js
+    environment:
+      - PORT=3004
+      - EDGE_ID=Edge-4
+      - ORIGIN_HOST=origin
+      - ORIGIN_PORT=4000
+    depends_on:
+      - origin
+
+  edge-5:
+    build: .
+    command: node backend/edge/edge.js
+    environment:
+      - PORT=3005
+      - EDGE_ID=Edge-5
+      - ORIGIN_HOST=origin
+      - ORIGIN_PORT=4000
+    depends_on:
+      - origin
+
+  edge-6:
+    build: .
+    command: node backend/edge/edge.js
+    environment:
+      - PORT=3006
+      - EDGE_ID=Edge-6
+      - ORIGIN_HOST=origin
+      - ORIGIN_PORT=4000
+    depends_on:
+      - origin

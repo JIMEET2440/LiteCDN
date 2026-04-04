@@ -20,7 +20,7 @@ echo "==========================================="
 
 echo -e "\n[1] Checking CDN status..."
 
-STATUS=$(curl -s "$GATEWAY_URL/health")
+STATUS=$(curl -s "$GATEWAY_URL/status")
 
 if [[ $STATUS != *"UP"* ]]; then
   echo "❌ CDN is NOT running at $GATEWAY_URL"

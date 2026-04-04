@@ -232,7 +232,7 @@ async function testCDNFunctions() {
     a.assertStatusCode(res.status, 200, 'Status endpoint should return 200');
     a.assertEqual(res.data.server, 'CDNSystem', 'Server name should be CDNSystem');
     a.assertTrue(Array.isArray(res.data.edges), 'Edges should be an array');
-    a.assertEqual(res.data.edges.length, 3, 'Should have exactly 3 edges configured', { edges: res.data.edges });
+    a.assertEqual(res.data.edges.length, 6, 'Should have exactly 6 edges configured', { edges: res.data.edges });
     
     // Verify edge structure
     res.data.edges.forEach((edge, idx) => {

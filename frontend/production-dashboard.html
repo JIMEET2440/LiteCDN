@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiteCDN - Production Hub</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js for lightweight reactivity without build tools -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+        .log-container { max-height: 250px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;}
+        .log-entry { border-bottom: 1px solid rgba(255,255,255,0.05); padding: 4px 0; }
+        
+        /* Custom Scrollbar for logs */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    </style>
+</head>
+<body class="min-h-screen p-6" x-data="cdnDashboard()">
+    
+    <header class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+                LiteCDN Operations Hub
+            </h1>
+            <p class="text-slate-400 mt-1">Real-time Content Delivery Network Simulation</p>
+        </div>
+        <div class="flex gap-4">
+            <div class="flex items-center gap-2 glass-panel px-4 py-2 rounded-xl">
+                <div class="w-3 h-3 rounded-full" :class="systemHealthy ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'"></div>
+                <span class="text-sm font-medium" x-text="systemHealthy ? 'System Healthy' : 'Degraded'"></span>
+            </div>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        
+        <!-- Left Column: Controls & Interactions -->
+        <div class="space-y-6 lg:col-span-1">
+            
+            <!-- Origin Server Control -->
+            <div class="glass-panel p-5 rounded-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold flex items-center gap-2">
+                        <i class="ph ph-hard-drives text-purple-400 text-xl"></i> Origin Server
+                    </h2>
+                    <button @click="toggleOrigin()" class="px-3 py-1 rounded text-xs font-bold transition-colors"
+                        :class="originStatus === 'online' ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'"
+                        x-text="originStatus === 'online' ? 'Take Offline' : 'Bring Online'">
+                    </button>
+                </div>
+                <div class="text-sm text-slate-400 mb-4">Port: 4000 | Status: <span :class="originStatus === 'online' ? 'text-emerald-400' : 'text-red-400'" x-text="originStatus.toUpperCase()"></span></div>
+
+                <div class="border-t border-slate-700 pt-4">
+                    <h3 class="text-sm font-medium mb-3">Upload Content</h3>
+                    <input type="file" @change="handleFileDrop" class="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm mb-2 text-slate-300 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer">
+                    <button @click="uploadFile()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded transition-colors text-sm flex justify-center items-center gap-2" :disabled="uploading || !uploadFilename">
+                        <i class="ph ph-upload-simple" x-show="!uploading"></i>
+                        <i class="ph ph-spinner animate-spin" x-show="uploading"></i>
+                        <span x-text="uploading ? 'Uploading...' : 'Upload to Origin'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Client Request Simulator -->
+            <div class="glass-panel p-5 rounded-2xl">
+                <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
+                    <i class="ph ph-laptop text-blue-400 text-xl"></i> Request Simulator
+                </h2>
+                <p class="text-xs text-slate-400 mb-4">Simulate a client fetching a file via the CDN Gateway.</p>
+                <div class="flex gap-2 mb-3">
+                    <input type="text" x-model="requestPath" placeholder="file_1.txt" class="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" @keydown.enter="simulateRequest()">
+                    <button @click="simulateRequest()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded text-sm font-medium transition-colors" :disabled="requesting">
+                        Fetch
+                    </button>
+                </div>
+                
+                <!-- Last Request Result -->
+                <div x-show="lastRequest" class="mt-4 p-3 bg-slate-800/50 rounded border" :class="lastRequest?.hit ? 'border-emerald-500/30' : 'border-amber-500/30'" style="display: none;">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-bold" :class="lastRequest?.hit ? 'text-emerald-400' : 'text-amber-400'" x-text="lastRequest?.hit ? 'CACHE HIT' : 'CACHE MISS'"></span>
+                        <span class="text-xs text-slate-400" x-text="lastRequest?.time + ' ms'"></span>
+                    </div>
+                    <div class="text-xs text-slate-300">Served by: <span class="font-mono text-blue-300" x-text="lastRequest?.server"></span></div>
+                </div>
+            </div>
+
+            <!-- Settings -->
+            <div class="glass-panel p-5 rounded-2xl">
+                <h2 class="text-sm font-semibold flex items-center gap-2 mb-3 text-slate-300">
+                    <i class="ph ph-gear text-slate-400"></i> CDN Configuration
+                </h2>
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs text-slate-400">Routing Policy</span>
+                    <span class="bg-slate-800 text-xs border border-slate-700/50 rounded px-3 py-1 font-mono text-blue-300 shadow-inner">Alpha-beta + &epsilon;</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-slate-400">Cache Eviction</span>
+                    <span class="bg-slate-800 text-xs border border-slate-700/50 rounded px-3 py-1 font-mono text-purple-300 shadow-inner">Segmented Cache</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Edge Nodes & Map -->
+        <div class="lg:col-span-3 space-y-6">
+            
+            <!-- Nodes Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                <template x-for="edge in edges" :key="edge.id">
+                    <div class="glass-panel p-4 rounded-xl border-l-4 transition-all duration-300" 
+                         :class="edge.status === 'online' ? 'border-l-emerald-500' : 'border-l-red-500 opacity-60'">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <h3 class="font-bold flex items-center gap-2" x-text="edge.id"></h3>
+                                <div class="text-xs text-slate-400" x-text="edge.host + ':' + edge.port"></div>
+                            </div>
+                            <div class="px-2 py-1 rounded bg-slate-800 text-xs font-mono" x-text="edge.latency + 'ms'"></div>
+                        </div>
+
+                        <div class="space-y-3 mt-4">
+                            <!-- Load Bar -->
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-slate-400">Simulated Load</span>
+                                    <span x-text="edge.load + '%'"></span>
+                                </div>
+                                <div class="w-full bg-slate-800 rounded-full h-1.5">
+                                    <div class="h-1.5 rounded-full transition-all duration-500" 
+                                         :class="edge.load > 80 ? 'bg-red-500' : edge.load > 50 ? 'bg-amber-500' : 'bg-blue-500'"
+                                         :style="'width: ' + edge.load + '%'"></div>
+                                </div>
+                            </div>
+
+                            <!-- Metrics -->
+                            <div class="flex justify-between items-center text-xs pt-2 border-t border-slate-700/50">
+                                <div class="text-center">
+                                    <div class="text-slate-400">Total Req</div>
+                                    <div class="font-mono mt-1 text-slate-200" x-text="edge.metrics?.total_requests || 0"></div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-slate-400">Hit Rate</div>
+                                    <div class="font-mono mt-1 text-emerald-400" x-text="calculateHitRate(edge) + '%'"></div>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-slate-400">Cache Size</div>
+                                    <div class="font-mono mt-1 text-purple-400" x-text="(edge.metrics?.cache_size || 0)"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Activity Logs -->
+            <div class="glass-panel p-5 rounded-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold flex items-center gap-2">
+                        <i class="ph ph-terminal-window text-emerald-400 text-xl"></i> Global Request Stream
+                    </h2>
+                    <button @click="logs = []" class="text-xs text-slate-400 hover:text-white"><i class="ph ph-trash"></i> Clear</button>
+                </div>
+                <div class="log-container bg-slate-900 rounded-lg p-4 h-64 border border-slate-800" id="log-window">
+                    <template x-for="(log, index) in logs" :key="index">
+                        <div class="log-entry flex items-start gap-3">
+                            <span class="text-slate-500 whitespace-nowrap" x-text="log.timestamp"></span>
+                            <span class="w-16 whitespace-nowrap font-bold" 
+                                  :class="log.type === 'HIT' ? 'text-emerald-400' : log.type === 'MISS' ? 'text-amber-400' : 'text-blue-400'" 
+                                  x-text="'[' + log.type + ']'"></span>
+                            <span class="text-slate-300 flex-1" x-html="log.msg"></span>
+                        </div>
+                    </template>
+                    <div x-show="logs.length === 0" class="text-slate-500 text-center italic mt-10">Waiting for traffic...</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // AlpineJS Controller
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('cdnDashboard', () => ({
+                edges: [],
+                originStatus: 'online',
+                systemHealthy: true,
+                
+                uploadFilename: '',
+                uploadContent: '',
+                uploading: false,
+                
+                requestPath: 'file_1.txt',
+                requesting: false,
+                lastRequest: null,
+                
+                routingPolicy: 'round_robin',
+                cachePolicy: 'lru',
+                
+                logs: [],
+
+                init() {
+                    this.fetchMetrics();
+                    setInterval(() => this.fetchMetrics(), 1500); // Poll metrics every 1.5s
+                    this.addLog('SYSTEM', 'Dashboard Initialized. Connected to CDN Gateway.');
+                },
+
+                addLog(type, msg) {
+                    const now = new Date();
+                    const timestamp = now.toISOString().split('T')[1].substring(0, 12);
+                    this.logs.unshift({ timestamp, type, msg }); // Add to top
+                    if(this.logs.length > 50) this.logs.pop();
+                },
+
+                calculateHitRate(edge) {
+                    if(!edge.metrics || edge.metrics.total_requests === 0) return 0;
+                    return Math.round((edge.metrics.cache_hits / edge.metrics.total_requests) * 100);
+                },
+
+                async fetchMetrics() {
+                    try {
+                        const res = await fetch('/status'); 
+                        if (!res.ok) throw new Error('Failed to fetch stats');
+                        const data = await res.json();
+                        
+                        // Map edge metrics to edges locally
+                        this.edges = data.edges.map(e => ({
+                            ...e,
+                            metrics: data.metrics[e.id],
+                            load: data.metrics[e.id]?.load || 0,
+                            latency: data.metrics[e.id]?.latency || 0,
+                            status: data.metrics[e.id]?.status || 'offline'
+                        }));
+                        this.systemHealthy = this.edges.some(e => e.status === 'online');
+                        
+                    } catch (err) {
+                        this.systemHealthy = false;
+                    }
+                },
+
+                async toggleOrigin() {
+                    const newMode = this.originStatus === 'online' ? 'stop' : 'start';
+                    try {
+                        await fetch(`http://localhost:4000/admin/${newMode}`, { method: 'POST' });
+                        this.originStatus = newMode === 'stop' ? 'offline' : 'online';
+                        this.addLog('SYS', `Origin server forced ${this.originStatus.toUpperCase()}`);
+                    } catch (e) {
+                        this.addLog('ERR', `Could not reach Origin Control API: ${e.message}`);
+                    }
+                },
+
+                handleFileDrop(e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    this.uploadFilename = file.name;
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        this.uploadContent = evt.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                },
+
+                async uploadFile() {
+                    if(!this.uploadFilename || !this.uploadContent) return alert('File required');
+                    this.uploading = true;
+                    try {
+                        const res = await fetch('http://localhost:4000/upload', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filename: this.uploadFilename, content: this.uploadContent })
+                        });
+                        
+                        if(res.ok) {
+                            this.addLog('UPLOAD', `Successfully uploaded <span class="text-blue-300">${this.uploadFilename}</span> to Origin.`);
+                            this.uploadFilename = '';
+                            this.uploadContent = '';
+                            document.querySelector('input[type="file"]').value = '';
+                        } else {
+                            throw new Error('Upload failed');
+                        }
+                    } catch (e) {
+                        this.addLog('ERR', `Upload failed: ${e.message}`);
+                    }
+                    this.uploading = false;
+                },
+
+                async simulateRequest() {
+                    if(!this.requestPath) return;
+                    this.requesting = true;
+                    const start = performance.now();
+                    
+                    try {
+                        // Request specifically with a flag to tell the backend to append Hit/Miss headers
+                        const res = await fetch(`/${this.requestPath}`);
+                        const time = Math.round(performance.now() - start);
+                        const server = res.headers.get('X-Served-By') || 'Gateway';
+                        const hit = res.headers.get('X-Cache') === 'HIT';
+                        
+                        this.lastRequest = { hit, time, server };
+                        
+                        this.addLog(hit ? 'HIT' : 'MISS', `GET /${this.requestPath} &rarr; ${time}ms (Served by ${server})`);
+                        
+                    } catch(e) {
+                        this.addLog('ERR', `Request failed: ${e.message}`);
+                    }
+                    
+                    this.requesting = false;
+                },
+
+                async updatePolicy(type) {
+                    const endpoint = type === 'routing' ? `/policy/routing` : `/policy/cache`;
+                    const val = type === 'routing' ? this.routingPolicy : this.cachePolicy;
+                    try {
+                        await fetch(endpoint, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ policy: val })
+                        });
+                        this.addLog('CONFIG', `Updated ${type} policy to <span class="text-purple-300 font-mono">${val}</span>`);
+                    } catch(e) {
+                        this.addLog('ERR', `Failed to update ${type} policy.`);
+                    }
+                }
+            }));
+        });
+    </script>
+</body>
+</html>

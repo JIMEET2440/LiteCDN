@@ -110,6 +110,7 @@ else if (PORT === 3005 || PORT === 3006 || PORT === '3005' || PORT === '3006') b
 
 let activeLoad = 0;
 const cache = new CacheManager();
+cache.setPolicy('segmented', 50 * 1024 * 1024); // 50MB default for segmented
 
 app.post('/policy/cache', express.json(), (req, res) => {
   const { mode, size } = req.body;

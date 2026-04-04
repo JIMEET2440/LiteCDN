@@ -1,0 +1,1608 @@
+{
+  "timestamp": "2026-03-30T04:38:55.127Z",
+  "summary": {
+    "total": 26,
+    "passed": 26,
+    "failed": 0,
+    "passRate": 100
+  },
+  "results": {
+    "passed": [
+      {
+        "moduleName": "cdn.js",
+        "testName": "handleHealthCheck - returns complete health status",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Health check should return 200 OK (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Server status should be UP",
+            "expected": "UP",
+            "actual": "UP",
+            "context": {
+              "response": {
+                "status": "UP",
+                "server": "CDNSystem",
+                "port": 3000
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Server name should be CDNSystem",
+            "expected": "CDNSystem",
+            "actual": "CDNSystem",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Port should be a number",
+            "context": {
+              "port": 3000
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Port should be positive",
+            "context": {
+              "port": 3000
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "cdn.js",
+        "testName": "handleStatusRequest - returns edge list and status",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Status endpoint should return 200 (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Server name should be CDNSystem",
+            "expected": "CDNSystem",
+            "actual": "CDNSystem",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edges should be an array",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Should have exactly 3 edges configured",
+            "expected": 3,
+            "actual": 3,
+            "context": {
+              "edges": [
+                {
+                  "id": "Edge-1",
+                  "host": "localhost",
+                  "port": 3001,
+                  "url": "http://localhost:3001",
+                  "latency": 0,
+                  "load": 0.44,
+                  "loadNormalized": 0.0044
+                },
+                {
+                  "id": "Edge-2",
+                  "host": "localhost",
+                  "port": 3002,
+                  "url": "http://localhost:3002",
+                  "latency": 0,
+                  "load": 0.44,
+                  "loadNormalized": 0.0044
+                },
+                {
+                  "id": "Edge-3",
+                  "host": "localhost",
+                  "port": 3003,
+                  "url": "http://localhost:3003",
+                  "latency": 0,
+                  "load": 0.44,
+                  "loadNormalized": 0.0044
+                }
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": "http://localhost:3001",
+            "message": "Edge 1 should have id and url",
+            "context": {
+              "edge": {
+                "id": "Edge-1",
+                "host": "localhost",
+                "port": 3001,
+                "url": "http://localhost:3001",
+                "latency": 0,
+                "load": 0.44,
+                "loadNormalized": 0.0044
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": "http://localhost:3002",
+            "message": "Edge 2 should have id and url",
+            "context": {
+              "edge": {
+                "id": "Edge-2",
+                "host": "localhost",
+                "port": 3002,
+                "url": "http://localhost:3002",
+                "latency": 0,
+                "load": 0.44,
+                "loadNormalized": 0.0044
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": "http://localhost:3003",
+            "message": "Edge 3 should have id and url",
+            "context": {
+              "edge": {
+                "id": "Edge-3",
+                "host": "localhost",
+                "port": 3003,
+                "url": "http://localhost:3003",
+                "latency": 0,
+                "load": 0.44,
+                "loadNormalized": 0.0044
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Current index should be a number",
+            "context": {},
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "cdn.js",
+        "testName": "handleCDNRequest - proxies file with correct headers",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "CDN request should return 200 (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Response should contain file content",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Response should contain X-Edge-ID header",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Response should contain X-Cache header",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Response should contain X-Response-Time header",
+            "context": {},
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "cdn.js",
+        "testName": "handleCDNRequest - distributes via round-robin",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Edge-1 should receive exactly 4 requests, got 4",
+            "context": {
+              "distribution": {
+                "Edge-1": 4,
+                "Edge-2": 4,
+                "Edge-3": 4
+              },
+              "sequence": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-2 should receive exactly 4 requests, got 4",
+            "context": {
+              "distribution": {
+                "Edge-1": 4,
+                "Edge-2": 4,
+                "Edge-3": 4
+              },
+              "sequence": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-3 should receive exactly 4 requests, got 4",
+            "context": {
+              "distribution": {
+                "Edge-1": 4,
+                "Edge-2": 4,
+                "Edge-3": 4
+              },
+              "sequence": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Round-robin pattern should repeat consistently (cycles 1-2)",
+            "expected": "Edge-1,Edge-2,Edge-3",
+            "actual": "Edge-1,Edge-2,Edge-3",
+            "context": {
+              "distribution": {
+                "Edge-1": 4,
+                "Edge-2": 4,
+                "Edge-3": 4
+              },
+              "sequence": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ],
+              "pattern1": "Edge-1,Edge-2,Edge-3",
+              "pattern2": "Edge-1,Edge-2,Edge-3"
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Round-robin pattern should repeat consistently (cycles 1-3)",
+            "expected": "Edge-1,Edge-2,Edge-3",
+            "actual": "Edge-1,Edge-2,Edge-3",
+            "context": {
+              "distribution": {
+                "Edge-1": 4,
+                "Edge-2": 4,
+                "Edge-3": 4
+              },
+              "sequence": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ],
+              "pattern1": "Edge-1,Edge-2,Edge-3",
+              "pattern3": "Edge-1,Edge-2,Edge-3"
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "cdn.js",
+        "testName": "handleCDNRequest - returns 404 for invalid routes",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Invalid route should return 404 Not Found (Status: 404)",
+            "expected": 404,
+            "actual": 404,
+            "context": {},
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "edge.js",
+        "testName": "fetchFromOrigin - fetches from origin correctly",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Fetch should return 200 (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Response should contain file content",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Response should have cache header",
+            "context": {},
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "edge.js",
+        "testName": "putCache - stores in cache, serveFromCache - serves from cache",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Cache should either go MISS→HIT or be HIT→HIT if already warmed",
+            "context": {
+              "firstResponse": "MISS",
+              "secondResponse": "HIT",
+              "note": "Acceptable if cache persists from previous runs"
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "edge.js",
+        "testName": "Cache - achieves > 50% hit rate across edges",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Cache hit rate should be >= 50%, got 58.3%",
+            "context": {
+              "hits": 7,
+              "misses": 5,
+              "hitRate": "58.3%"
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "origin.js",
+        "testName": "serveStaticContent - serves multiple file types",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Should serve .txt file (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Text file should have content",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Should serve .json file (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "JSON file should parse as object",
+            "context": {},
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "origin.js",
+        "testName": "serveStaticContent - returns 404 for missing files",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Missing file should return 404 (Status: 404)",
+            "expected": 404,
+            "actual": 404,
+            "context": {},
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "origin.js",
+        "testName": "handleHealthCheck - returns UP status",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Health check should return 200 (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Origin should report UP status",
+            "expected": "UP",
+            "actual": "UP",
+            "context": {},
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "origin.js",
+        "testName": "serveMockAPI - serves mock API data",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "API endpoint should return 200 (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "API should return object",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "API should include source field",
+            "expected": "OriginServer",
+            "actual": "OriginServer",
+            "context": {},
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "routing.js",
+        "testName": "constructor - initializes with 3 edges",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Edges should be an array",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Should initialize exactly 3 edges",
+            "expected": 3,
+            "actual": 3,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge should have an id",
+            "context": {
+              "edge": {
+                "id": "Edge-1",
+                "host": "localhost",
+                "port": 3001,
+                "url": "http://localhost:3001",
+                "latency": 34.5888,
+                "load": 0.44,
+                "loadNormalized": 0.0044
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge should have a url",
+            "context": {
+              "edge": {
+                "id": "Edge-1",
+                "host": "localhost",
+                "port": 3001,
+                "url": "http://localhost:3001",
+                "latency": 34.5888,
+                "load": 0.44,
+                "loadNormalized": 0.0044
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge should have an id",
+            "context": {
+              "edge": {
+                "id": "Edge-2",
+                "host": "localhost",
+                "port": 3002,
+                "url": "http://localhost:3002",
+                "latency": 22.48,
+                "load": 0.44,
+                "loadNormalized": 0.0044
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge should have a url",
+            "context": {
+              "edge": {
+                "id": "Edge-2",
+                "host": "localhost",
+                "port": 3002,
+                "url": "http://localhost:3002",
+                "latency": 22.48,
+                "load": 0.44,
+                "loadNormalized": 0.0044
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge should have an id",
+            "context": {
+              "edge": {
+                "id": "Edge-3",
+                "host": "localhost",
+                "port": 3003,
+                "url": "http://localhost:3003",
+                "latency": 29.648000000000003,
+                "load": 0.44,
+                "loadNormalized": 0.0044
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge should have a url",
+            "context": {
+              "edge": {
+                "id": "Edge-3",
+                "host": "localhost",
+                "port": 3003,
+                "url": "http://localhost:3003",
+                "latency": 29.648000000000003,
+                "load": 0.44,
+                "loadNormalized": 0.0044
+              }
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "routing.js",
+        "testName": "selectEdge - implements perfect round-robin",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Round-robin pattern should repeat consistently (cycles 1-2)",
+            "expected": "Edge-1,Edge-2,Edge-3",
+            "actual": "Edge-1,Edge-2,Edge-3",
+            "context": {
+              "pattern1": "Edge-1,Edge-2,Edge-3",
+              "pattern2": "Edge-1,Edge-2,Edge-3",
+              "pattern3": "Edge-1,Edge-2,Edge-3",
+              "fullSequence": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Round-robin pattern should repeat consistently (cycles 1-3)",
+            "expected": "Edge-1,Edge-2,Edge-3",
+            "actual": "Edge-1,Edge-2,Edge-3",
+            "context": {
+              "pattern1": "Edge-1,Edge-2,Edge-3",
+              "pattern3": "Edge-1,Edge-2,Edge-3",
+              "fullSequence": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-1 should receive exactly 4 out of 12 requests",
+            "expected": 4,
+            "actual": 4,
+            "context": {
+              "distribution": {
+                "Edge-1": 4,
+                "Edge-2": 4,
+                "Edge-3": 4
+              },
+              "sequence": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-2 should receive exactly 4 out of 12 requests",
+            "expected": 4,
+            "actual": 4,
+            "context": {
+              "distribution": {
+                "Edge-1": 4,
+                "Edge-2": 4,
+                "Edge-3": 4
+              },
+              "sequence": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-3 should receive exactly 4 out of 12 requests",
+            "expected": 4,
+            "actual": 4,
+            "context": {
+              "distribution": {
+                "Edge-1": 4,
+                "Edge-2": 4,
+                "Edge-3": 4
+              },
+              "sequence": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ]
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "routing.js",
+        "testName": "getEdgeList & validateRequest",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "getEdgeList should return array of edges",
+            "context": {
+              "edges": [
+                {
+                  "id": "Edge-1",
+                  "host": "localhost",
+                  "port": 3001,
+                  "url": "http://localhost:3001",
+                  "latency": 15.841172480000004,
+                  "load": 0.44,
+                  "loadNormalized": 0.0044
+                },
+                {
+                  "id": "Edge-2",
+                  "host": "localhost",
+                  "port": 3002,
+                  "url": "http://localhost:3002",
+                  "latency": 10.881408000000002,
+                  "load": 0.44,
+                  "loadNormalized": 0.0044
+                },
+                {
+                  "id": "Edge-3",
+                  "host": "localhost",
+                  "port": 3003,
+                  "url": "http://localhost:3003",
+                  "latency": 14.060620800000002,
+                  "load": 0.44,
+                  "loadNormalized": 0.0044
+                }
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Should have at least 1 edge",
+            "expected": "> 0",
+            "actual": 3,
+            "context": {
+              "edgeCount": 3
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge 0 should have id field",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge 0 should have url field",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge 1 should have id field",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge 1 should have url field",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge 2 should have id field",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge 2 should have url field",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "validateRequest should allow valid /cdn/* paths (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "validateRequest should reject invalid paths with 404 (Status: 404)",
+            "expected": 404,
+            "actual": 404,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Valid request should have x-edge-id header from routing",
+            "context": {},
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "routing.js",
+        "testName": "getCurrentIndex - tracks rotation index",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Index should be 0-2",
+            "context": {
+              "indices": [
+                0,
+                0,
+                0
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Index should be 0-2",
+            "context": {
+              "indices": [
+                0,
+                0,
+                0
+              ]
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "routing.js",
+        "testName": "updateLoad - ingests normalized edge load and scales to ms",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Routing metrics endpoint should return 200 (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Routing metrics should include edge list",
+            "context": {
+              "response": {
+                "mode": "alpha-beta",
+                "alpha": 0.55,
+                "beta": 0.44999999999999996,
+                "loadScaleMs": 100,
+                "edges": [
+                  {
+                    "id": "Edge-1",
+                    "latencyMs": 13.272937984000004,
+                    "loadNormalized": 0.0283,
+                    "loadScoreMs": 2.83,
+                    "score": 8.573615891200003
+                  },
+                  {
+                    "id": "Edge-2",
+                    "latencyMs": 9.105126400000003,
+                    "loadNormalized": 0.0247,
+                    "loadScoreMs": 2.4699999999999998,
+                    "score": 6.119319520000001
+                  },
+                  {
+                    "id": "Edge-3",
+                    "latencyMs": 14.060620800000002,
+                    "loadNormalized": 0.0239,
+                    "loadScoreMs": 2.39,
+                    "score": 8.808841440000002
+                  }
+                ]
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Routing metrics should include loadScaleMs",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Each routing metric edge should include id",
+            "context": {
+              "edge": {
+                "id": "Edge-1",
+                "latencyMs": 13.272937984000004,
+                "loadNormalized": 0.0283,
+                "loadScoreMs": 2.83,
+                "score": 8.573615891200003
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-1 should expose loadNormalized",
+            "context": {
+              "edge": {
+                "id": "Edge-1",
+                "latencyMs": 13.272937984000004,
+                "loadNormalized": 0.0283,
+                "loadScoreMs": 2.83,
+                "score": 8.573615891200003
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-1 loadNormalized should be in [0,1]",
+            "context": {
+              "edge": {
+                "id": "Edge-1",
+                "latencyMs": 13.272937984000004,
+                "loadNormalized": 0.0283,
+                "loadScoreMs": 2.83,
+                "score": 8.573615891200003
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-1 should expose loadScoreMs",
+            "context": {
+              "edge": {
+                "id": "Edge-1",
+                "latencyMs": 13.272937984000004,
+                "loadNormalized": 0.0283,
+                "loadScoreMs": 2.83,
+                "score": 8.573615891200003
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-1 loadScoreMs should equal loadNormalized * loadScaleMs",
+            "context": {
+              "loadNormalized": 0.0283,
+              "loadScaleMs": 100,
+              "loadScoreMs": 2.83,
+              "expectedLoadScore": 2.83,
+              "delta": 0
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Each routing metric edge should include id",
+            "context": {
+              "edge": {
+                "id": "Edge-2",
+                "latencyMs": 9.105126400000003,
+                "loadNormalized": 0.0247,
+                "loadScoreMs": 2.4699999999999998,
+                "score": 6.119319520000001
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-2 should expose loadNormalized",
+            "context": {
+              "edge": {
+                "id": "Edge-2",
+                "latencyMs": 9.105126400000003,
+                "loadNormalized": 0.0247,
+                "loadScoreMs": 2.4699999999999998,
+                "score": 6.119319520000001
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-2 loadNormalized should be in [0,1]",
+            "context": {
+              "edge": {
+                "id": "Edge-2",
+                "latencyMs": 9.105126400000003,
+                "loadNormalized": 0.0247,
+                "loadScoreMs": 2.4699999999999998,
+                "score": 6.119319520000001
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-2 should expose loadScoreMs",
+            "context": {
+              "edge": {
+                "id": "Edge-2",
+                "latencyMs": 9.105126400000003,
+                "loadNormalized": 0.0247,
+                "loadScoreMs": 2.4699999999999998,
+                "score": 6.119319520000001
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-2 loadScoreMs should equal loadNormalized * loadScaleMs",
+            "context": {
+              "loadNormalized": 0.0247,
+              "loadScaleMs": 100,
+              "loadScoreMs": 2.4699999999999998,
+              "expectedLoadScore": 2.4699999999999998,
+              "delta": 0
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Each routing metric edge should include id",
+            "context": {
+              "edge": {
+                "id": "Edge-3",
+                "latencyMs": 14.060620800000002,
+                "loadNormalized": 0.0239,
+                "loadScoreMs": 2.39,
+                "score": 8.808841440000002
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-3 should expose loadNormalized",
+            "context": {
+              "edge": {
+                "id": "Edge-3",
+                "latencyMs": 14.060620800000002,
+                "loadNormalized": 0.0239,
+                "loadScoreMs": 2.39,
+                "score": 8.808841440000002
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-3 loadNormalized should be in [0,1]",
+            "context": {
+              "edge": {
+                "id": "Edge-3",
+                "latencyMs": 14.060620800000002,
+                "loadNormalized": 0.0239,
+                "loadScoreMs": 2.39,
+                "score": 8.808841440000002
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-3 should expose loadScoreMs",
+            "context": {
+              "edge": {
+                "id": "Edge-3",
+                "latencyMs": 14.060620800000002,
+                "loadNormalized": 0.0239,
+                "loadScoreMs": 2.39,
+                "score": 8.808841440000002
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge-3 loadScoreMs should equal loadNormalized * loadScaleMs",
+            "context": {
+              "loadNormalized": 0.0239,
+              "loadScaleMs": 100,
+              "loadScoreMs": 2.39,
+              "expectedLoadScore": 2.39,
+              "delta": 0
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "testAPI.js",
+        "testName": "runLoadTestAPI - handles 100 concurrent requests",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Load test should return 200 (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": {
+              "totalRequests": 100,
+              "successRequests": 100,
+              "failureRequests": 0,
+              "successPercent": "100.0",
+              "avgPerEdge": "33.33",
+              "min": 10,
+              "max": 51,
+              "imbalancePercent": 123
+            },
+            "message": "Response should have summary",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Should complete 100 requests",
+            "expected": 100,
+            "actual": 100,
+            "context": {
+              "summary": {
+                "totalRequests": 100,
+                "successRequests": 100,
+                "failureRequests": 0,
+                "successPercent": "100.0",
+                "avgPerEdge": "33.33",
+                "min": 10,
+                "max": 51,
+                "imbalancePercent": 123
+              }
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "testAPI.js",
+        "testName": "runCacheTestAPI - validates cache behavior",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Cache test should return 200 (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": {
+              "totalRequests": 9,
+              "hits": 9,
+              "misses": 0,
+              "hitRate": "100.0"
+            },
+            "message": "Response should have summary",
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Should have executed requests",
+            "expected": "> 0",
+            "actual": 9,
+            "context": {
+              "summary": {
+                "totalRequests": 9,
+                "hits": 9,
+                "misses": 0,
+                "hitRate": "100.0"
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Cache hit rate should be > 50%",
+            "expected": "> 0.5",
+            "actual": "100.0",
+            "context": {
+              "hitRate": "10000.0%"
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "testAPI.js",
+        "testName": "runRoutingTestAPI - validates routing sequence",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Routing test should return 200 (Status: 200)",
+            "expected": 200,
+            "actual": 200,
+            "context": {},
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Response should have sequence array",
+            "context": {
+              "response": {
+                "mode": "round-robin",
+                "expected": [
+                  "Edge-1",
+                  "Edge-2",
+                  "Edge-3",
+                  "Edge-1",
+                  "Edge-2",
+                  "Edge-3",
+                  "Edge-1",
+                  "Edge-2",
+                  "Edge-3",
+                  "Edge-1",
+                  "Edge-2",
+                  "Edge-3"
+                ],
+                "observed": [
+                  "Edge-1",
+                  "Edge-2",
+                  "Edge-3",
+                  "Edge-1",
+                  "Edge-2",
+                  "Edge-3",
+                  "Edge-1",
+                  "Edge-2",
+                  "Edge-3",
+                  "Edge-1",
+                  "Edge-2",
+                  "Edge-3"
+                ],
+                "summary": {
+                  "totalRequests": 12,
+                  "correctCount": 12,
+                  "accuracy": "100.0"
+                }
+              }
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Routing should use multiple edges",
+            "context": {
+              "uniqueEdges": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ],
+              "sequence": [
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3",
+                "Edge-1",
+                "Edge-2",
+                "Edge-3"
+              ]
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "cache",
+        "testName": "Multi-edge cache coordination - each edge maintains separate cache",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Should test 3 edges",
+            "context": {
+              "cacheStatuses": [
+                "HIT",
+                "HIT",
+                "HIT"
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge 1 should return HIT or MISS",
+            "context": {
+              "status": "HIT",
+              "edgeIndex": 1
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge 2 should return HIT or MISS",
+            "context": {
+              "status": "HIT",
+              "edgeIndex": 2
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Edge 3 should return HIT or MISS",
+            "context": {
+              "status": "HIT",
+              "edgeIndex": 3
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "cache",
+        "testName": "Cache hit rate - improves with repeated requests to same edge",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Should have cache HITs after initial request",
+            "context": {
+              "results": [
+                "HIT",
+                "HIT",
+                "HIT",
+                "HIT",
+                "HIT",
+                "HIT",
+                "HIT",
+                "HIT",
+                "HIT",
+                "HIT"
+              ],
+              "hits": 10,
+              "misses": 0,
+              "hitRate": "100.0%"
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "cache",
+        "testName": "Cache consistency - same file retrieved consistently through gateway",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "All responses should have same content length",
+            "expected": 1,
+            "actual": 1,
+            "context": {
+              "results": [
+                {
+                  "edgeId": "Edge-2",
+                  "cacheStatus": "HIT",
+                  "contentLength": 106
+                },
+                {
+                  "edgeId": "Edge-2",
+                  "cacheStatus": "HIT",
+                  "contentLength": 106
+                },
+                {
+                  "edgeId": "Edge-2",
+                  "cacheStatus": "HIT",
+                  "contentLength": 106
+                },
+                {
+                  "edgeId": "Edge-2",
+                  "cacheStatus": "HIT",
+                  "contentLength": 106
+                },
+                {
+                  "edgeId": "Edge-1",
+                  "cacheStatus": "HIT",
+                  "contentLength": 106
+                },
+                {
+                  "edgeId": "Edge-2",
+                  "cacheStatus": "HIT",
+                  "contentLength": 106
+                }
+              ],
+              "uniqueLengths": [
+                106
+              ]
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Should distribute across one or more edges",
+            "context": {
+              "edgesHit": [
+                "Edge-2",
+                "Edge-1"
+              ],
+              "distribution": {
+                "Edge-2": 5,
+                "Edge-1": 1
+              }
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "routing.js",
+        "testName": "Alpha-beta routing - selects edges based on combined latency and load",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Should use at least 1 edge",
+            "context": {
+              "distribution": {
+                "Edge-1": 3,
+                "Edge-2": 12
+              },
+              "uniqueEdges": 2
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "No single edge should receive all requests",
+            "context": {
+              "distribution": {
+                "Edge-1": 3,
+                "Edge-2": 12
+              },
+              "maxRequests": 12
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "routing.js",
+        "testName": "Epsilon-greedy - explores alternative edges probabilistically",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Should explore different edges",
+            "context": {
+              "uniqueEdges": [
+                "Edge-2",
+                "Edge-1"
+              ],
+              "sequenceLength": 30
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Epsilon-greedy exploration observed",
+            "context": {
+              "distribution": {
+                "Edge-2": 18,
+                "Edge-1": 12
+              },
+              "uniqueEdgesCount": 2
+            },
+            "passed": true
+          }
+        ]
+      },
+      {
+        "moduleName": "routing.js",
+        "testName": "Mode switching - can switch between round-robin and alpha-beta",
+        "assertions": [
+          {
+            "condition": true,
+            "message": "Should have a valid routing mode",
+            "context": {
+              "mode": "alpha-beta"
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Should switch to round-robin mode",
+            "expected": "round-robin",
+            "actual": "round-robin",
+            "context": {
+              "mode": "round-robin"
+            },
+            "passed": true
+          },
+          {
+            "condition": true,
+            "message": "Should switch back to alpha-beta mode",
+            "expected": "alpha-beta",
+            "actual": "alpha-beta",
+            "context": {
+              "mode": "alpha-beta"
+            },
+            "passed": true
+          }
+        ]
+      }
+    ],
+    "failed": []
+  }
+}

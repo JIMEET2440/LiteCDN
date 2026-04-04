@@ -17,14 +17,34 @@
 
 const express = require('express');
 const path    = require('path');
+const cors    = require('cors');
 const config  = require('../config');
 
 // ── Create Express App ───────────────────────────────────────
 const app  = express();
+
+// Manually ensure CORS preflight and access control
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
+app.use(cors()); // Fallback standard CORS
+
 const PORT = config.origin.port;
 
 // ── Logging Middleware ───────────────────────────────────────
-app.use((req, _res, next) => {
+let isOffline = false;
+
+app.use(express.json({ limit: '50mb' })); // Support JSON bodies for upload
+app.use((req, res, next) => {
+  if (isOffline && !req.url.startsWith('/admin') && !req.url.startsWith('/config')) {
+    return res.status(503).json({ error: 'Origin server is offline' });
+  }
   console.log(`[OriginServer] 📥  ${req.method} ${req.url}`);
   next();
 });
@@ -106,6 +126,46 @@ function handleNotFound(_req, res) {
 app.use('/content', serveStaticContent());
 app.use('/content', handleStaticError);app.get('/api/data', serveMockAPI);app.get('/mock/api', serveMockAPI);
 app.get('/health', handleHealthCheck);
+
+// ── Dashboard Endpoints ─────────────────────────────────────
+app.post('/admin/stop', (req, res) => {
+  isOffline = true;
+  console.log('[OriginServer] 🛑 Server stopped (Offline mode)');
+  res.json({ message: 'Origin server is now offline' });
+});
+
+app.post('/admin/start', (req, res) => {
+  isOffline = false;
+  console.log('[OriginServer] 🟢 Server started (Online mode)');
+  res.json({ message: 'Origin server is now online' });
+});
+
+app.get('/config', (req, res) => {
+  res.json(config.origin);
+});
+
+app.post('/upload', (req, res) => {
+  const fs = require('fs');
+  const { filename, content } = req.body;
+  if (!filename || !content) {
+    return res.status(400).json({ error: 'Missing filename or content in JSON body' });
+  }
+  try {
+    const filePath = path.join(__dirname, 'static', filename);
+    const isBase64 = content.startsWith('data:');
+    if (isBase64) {
+      const base64Data = content.split(';base64,').pop();
+      fs.writeFileSync(filePath, base64Data, { encoding: 'base64' });
+    } else {
+      fs.writeFileSync(filePath, content);
+    }
+    console.log(`[OriginServer] 📤  Uploaded new file: ${filename}`);
+    res.json({ message: 'File uploaded successfully', filename });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to upload file to origin' });
+  }
+});
+
 app.use(handleNotFound);
 
 // ── Start Server ─────────────────────────────────────────────

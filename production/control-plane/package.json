@@ -1,0 +1,13 @@
+{
+  "name": "litecdn-control-plane",
+  "version": "1.0.0",
+  "description": "The Vercel-hosted SaaS Control Plane for LiteCDN",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  }
+}

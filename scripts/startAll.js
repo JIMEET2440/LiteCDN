@@ -61,6 +61,9 @@ children.push(startServer('Origin', 'backend/origin/origin.js'));
 children.push(startServer('Edge-1', 'backend/edge/edge.js', { PORT: '3001', EDGE_ID: 'Edge-1' }));
 children.push(startServer('Edge-2', 'backend/edge/edge.js', { PORT: '3002', EDGE_ID: 'Edge-2' }));
 children.push(startServer('Edge-3', 'backend/edge/edge.js', { PORT: '3003', EDGE_ID: 'Edge-3' }));
+children.push(startServer('Edge-4', 'backend/edge/edge.js', { PORT: '3004', EDGE_ID: 'Edge-4' }));
+children.push(startServer('Edge-5', 'backend/edge/edge.js', { PORT: '3005', EDGE_ID: 'Edge-5' }));
+children.push(startServer('Edge-6', 'backend/edge/edge.js', { PORT: '3006', EDGE_ID: 'Edge-6' }));
 
 // 3. CDN Gateway (port 3000) – start slightly delayed so edges are ready
 setTimeout(() => {

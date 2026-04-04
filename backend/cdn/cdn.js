@@ -1,16 +1,34 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const path = require('path');
 const config = require('../config');
 const RoutingService = require('./routing');
 
 const app = express();
 app.use(cors());
+app.use(express.static(path.join(__dirname, '../../frontend')));
+
+// --- Expose Production UI ---
+app.get('/production', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../frontend/production-dashboard.html'));
+});
+
+let isOffline = false;
+
+app.use((req, res, next) => {
+  // Allow admin and config requests even if offline
+  if (isOffline && !req.url.startsWith('/admin') && !req.url.startsWith('/config') && !req.url.startsWith('/status')) {
+    return res.status(503).json({ error: 'CDN gateway is currently offline.' });
+  }
+  next();
+});
 
 const PORT = config.cdn.port;
 const GATEWAY_NAME = 'CDNSystem';
 
 const routingService = new RoutingService(config.edges);
+routingService.setMode('alpha-beta', { alpha: 0.7, beta: 0.3, epsilon: 0.1 });
 let edgeMetrics = {};
 
 // Fetch metrics
@@ -29,6 +47,33 @@ setInterval(async () => {
 // Tracking local requests to avoid Stale State metrics
 const inFlightRequests = {};
 config.edges.forEach(e => inFlightRequests[e.id] = 0);
+
+// Dashboard Endpoints
+app.post('/admin/stop', (req, res) => {
+  isOffline = true;
+  console.log(`[CDNSystem] 🛑 CDN is offline`);
+  res.json({ message: 'CDN stopped (offline mode)' });
+});
+
+app.post('/admin/start', (req, res) => {
+  isOffline = false;
+  console.log(`[CDNSystem] 🟢 CDN is online`);
+  res.json({ message: 'CDN started (online mode)' });
+});
+
+app.get('/config', (req, res) => {
+  res.json({
+    routing: routingService.mode,
+    routingOptions: routingService.options,
+    edges: config.edges,
+    origin: config.origin,
+    cdn: config.cdn
+  });
+});
+
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(__dirname, '../../frontend/index.html'));
+});
 
 app.post('/policy/routing', express.json(), (req, res) => {
   const { mode, ...options } = req.body;

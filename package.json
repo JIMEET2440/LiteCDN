@@ -19,12 +19,18 @@
     "test:routing": "node -e \"const tests = require('./testing/unitTests.js'); tests.testRoutingFunctions().then(() => process.exit(0));\"",
     "test:api": "node -e \"const tests = require('./testing/unitTests.js'); tests.testAPIFunctions().then(() => process.exit(0));\""
   },
-  "keywords": ["cdn", "distributed-systems", "express", "educational"],
+  "keywords": [
+    "cdn",
+    "distributed-systems",
+    "express",
+    "educational"
+  ],
   "author": "LiteCDN Team",
   "license": "MIT",
   "dependencies": {
     "axios": "^1.7.0",
+    "cors": "^2.8.6",
     "express": "^4.21.0",
-    "cors": "^2.8.5"
+    "multer": "^2.1.1"
   }
 }
